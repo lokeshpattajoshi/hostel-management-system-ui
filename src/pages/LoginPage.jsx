@@ -5,7 +5,6 @@ import { login } from "../services/api";
 function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -32,19 +31,29 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const data = await login(email, password);
+      // 1. Call the login function
+      const response = await login(email, password);
 
-      if (!data || !data.token) {
-        setError("Invalid login response from server");
-        return;
+      // 2. IMPORTANT: Since our api.js returns the raw 'response' for login 
+      // (as seen in the login function we wrote earlier), we handle it here:
+      if (response.ok) {
+        const data = await response.json(); // Still need .json() for the raw login fetch
+        
+        if (data && data.token) {
+          localStorage.setItem("token", data.token);
+          navigate("/home");
+        } else {
+          setError("Invalid login response from server");
+        }
+      } else {
+        // If the email is coming back as null on the backend, 
+        // double-check the 'login' function in api.js 
+        // matches the keys { email, password }
+        setError("Invalid email or password.");
       }
-
-      localStorage.setItem("token", data.token);
-      navigate("/home");
     } catch (err) {
-      setError(
-        err?.message || "Invalid email or password. Please try again."
-      );
+      setError("Connection failed. Please try again.");
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -72,7 +81,6 @@ function LoginPage() {
       >
         <h2 style={{ textAlign: "center" }}>Login</h2>
 
-        {/* ✅ Error message at top */}
         {error && (
           <div
             style={{
@@ -88,45 +96,36 @@ function LoginPage() {
           </div>
         )}
 
-        {/* Email */}
         <div style={{ marginBottom: "15px" }}>
           <label style={{ display: "block", marginBottom: "5px" }}>
             Email Address
           </label>
           <input
-            type="text"
+            type="email" // Changed from text to email for better validation
+            name="email"
             placeholder="Enter email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px",
-              border: "1px solid #ccc",
-              borderRadius: "4px",
-            }}
+            style={inputStyle}
+            required
           />
         </div>
 
-        {/* Password */}
         <div style={{ marginBottom: "15px" }}>
           <label style={{ display: "block", marginBottom: "5px" }}>
             Password
           </label>
           <input
             type="password"
+            name="password"
             placeholder="Enter password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px",
-              border: "1px solid #ccc",
-              borderRadius: "4px",
-            }}
+            style={inputStyle}
+            required
           />
         </div>
 
-        {/* Submit Button */}
         <button
           type="submit"
           disabled={loading}
@@ -146,5 +145,13 @@ function LoginPage() {
     </div>
   );
 }
+
+const inputStyle = {
+  width: "100%",
+  padding: "10px",
+  border: "1px solid #ccc",
+  borderRadius: "4px",
+  boxSizing: "border-box", // Prevents input from overflowing form width
+};
 
 export default LoginPage;

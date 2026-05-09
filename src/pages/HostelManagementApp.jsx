@@ -10,14 +10,32 @@ const HostelManagementApp = ({ initialView = "VIEW" }) => {
   const [currentHostel, setCurrentHostel] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // ✅ Fix: Sync internal view state when initialView prop changes from Dashboard
+  useEffect(() => {
+    setView(initialView);
+  }, [initialView]);
+
   const loadHostels = async (name = "") => {
     try {
       const data = await fetchHostelsApi(name);
       setHostels(data);
-    } catch (err) { alert(err.message); }
+    } catch (err) { 
+      console.error("Load Error:", err);
+      alert(err.message); 
+    }
   };
 
-  useEffect(() => { loadHostels(); }, []);
+  // Load hostels on initial mount
+  useEffect(() => { 
+    loadHostels(); 
+  }, []);
+
+  // ✅ Optimization: Auto-refresh list if user clears the search bar
+  useEffect(() => {
+    if (searchQuery === "") {
+      loadHostels();
+    }
+  }, [searchQuery]);
 
   const handleSave = async (data) => {
     try {
@@ -27,21 +45,25 @@ const HostelManagementApp = ({ initialView = "VIEW" }) => {
         await updateHostelApi(data.hostelId, data);
       }
       setView("VIEW");
-      loadHostels();
-    } catch (err) { alert(err.message); }
+      loadHostels(); // Refresh the list after save
+    } catch (err) { 
+      alert(err.message); 
+    }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Delete this hostel?")) {
+    if (window.confirm("Are you sure you want to delete this hostel?")) {
       try {
         await deleteHostelApi(id);
         loadHostels();
-      } catch (err) { alert(err.message); }
+      } catch (err) { 
+        alert(err.message); 
+      }
     }
   };
 
   return (
-    <div>
+    <div style={{ background: "#fdfdfd", padding: "10px", borderRadius: "8px" }}>
       {view === "VIEW" && (
         <ViewHostels 
           hostels={hostels} 
@@ -49,11 +71,24 @@ const HostelManagementApp = ({ initialView = "VIEW" }) => {
           setSearchQuery={setSearchQuery} 
           onSearch={() => loadHostels(searchQuery)}
           onDelete={handleDelete}
-          onEdit={(h) => { setCurrentHostel(h); setView("MODIFY"); }} 
+          onEdit={(h) => { 
+            setCurrentHostel(h); 
+            setView("MODIFY"); 
+          }} 
         />
       )}
-      {view === "CREATE" && <CreateHostel onSave={handleSave} onCancel={() => setView("VIEW")} />}
-      {view === "MODIFY" && <ModifyHostel hostel={currentHostel} onUpdate={handleSave} onCancel={() => setView("VIEW")} />}
+      
+      {view === "CREATE" && (
+        <CreateHostel onSave={handleSave} onCancel={() => setView("VIEW")} />
+      )}
+      
+      {view === "MODIFY" && (
+        <ModifyHostel 
+          hostel={currentHostel} 
+          onUpdate={handleSave} 
+          onCancel={() => setView("VIEW")} 
+        />
+      )}
     </div>
   );
 };

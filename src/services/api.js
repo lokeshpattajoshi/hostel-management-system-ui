@@ -1,112 +1,66 @@
-const BASE_URL = "http://localhost:8080/api";
+const API_BASE_URL = "http://localhost:8080/api";
 
-// --- Existing Login ---
-export const login = async (email, password) => {
-  const response = await fetch(`${BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Login failed");
-  }
-
-  return response.json();
-};
-
-// --- Existing Helper ---
-export const fetchWithAuth = async (url, options = {}) => {
+export const fetchWithAuth = async (endpoint, options = {}) => {
   const token = localStorage.getItem("token");
+  const headers = { "Content-Type": "application/json", ...options.headers };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  return fetch(`${BASE_URL}${url}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      window.location.href = "/";
+      return null;
+    }
+
+    // Handle No Content (Delete/Empty Results)
+    if (response.status === 204) return [];
+
+    const text = await response.text();
+    if (!text) return []; // Return empty array if body is empty string
+
+    try {
+      return JSON.parse(text); // Try to parse as JSON
+    } catch (e) {
+      return text; // Return as plain text if not JSON
+    }
+  } catch (error) {
+    console.error("Fetch Error:", error);
+    return null;
+  }
 };
 
-// --- New User Management Functions ---
-
-// Fetch all or search users
-export const fetchUsersApi = async (query = "") => {
-  const endpoint = query 
-    ? `/users/search?name=${encodeURIComponent(query)}&email=${encodeURIComponent(query)}&phoneNumber=${encodeURIComponent(query)}`
-    : "/users";
-    
-  const response = await fetchWithAuth(endpoint, { method: "GET" });
-  
-  if (!response.ok) throw new Error("Failed to fetch users");
-  return response.json();
-};
-
-// Create a new user
-export const createUserApi = async (userData) => {
-  const response = await fetchWithAuth("/users", {
+export const login = async (email, password) => {
+  return await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
-    body: JSON.stringify(userData),
+    headers: { "Content-Type": "application/json" },
+    // Ensure the key name (email) matches your Backend DTO
+    body: JSON.stringify({ email: email, password: password }),
   });
-
-  if (!response.ok) throw new Error("Failed to create user");
-  return response.json();
 };
 
-// Update an existing user
-export const updateUserApi = async (id, userData) => {
-  const response = await fetchWithAuth(`/users/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(userData),
-  });
+// --- Updated API Functions (Removed .json() because helper does it) ---
 
-  if (!response.ok) throw new Error("Failed to update user");
-  return response.json();
-};
+export const fetchUsersApi = () => fetchWithAuth("/users");
+export const createUserApi = (data) => fetchWithAuth("/users", { method: "POST", body: JSON.stringify(data) });
+export const updateUserApi = (id, data) => fetchWithAuth(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteUserApi = (id) => fetchWithAuth(`/users/${id}`, { method: "DELETE" });
 
-// Delete a user
-export const deleteUserApi = async (id) => {
-  const response = await fetchWithAuth(`/users/${id}`, {
-    method: "DELETE",
-  });
+export const fetchHostelsApi = () => fetchWithAuth("/hostels");
+export const createHostelApi = (data) => fetchWithAuth("/hostels", { method: "POST", body: JSON.stringify(data) });
+export const updateHostelApi = (id, data) => fetchWithAuth(`/hostels/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteHostelApi = (id) => fetchWithAuth(`/hostels/${id}`, { method: "DELETE" });
 
-  if (!response.ok) throw new Error("Failed to delete user");
-  // Delete often returns 204 No Content, so we don't always call .json()
-  return response; 
-};
+export const fetchRoomsByHostelApi = () => fetchWithAuth("/rooms");
+export const createRoomApi = (data) => fetchWithAuth("/rooms", { method: "POST", body: JSON.stringify(data) });
+export const updateRoomApi = (id, data) => fetchWithAuth(`/rooms/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteRoomApi = (id) => fetchWithAuth(`/rooms/${id}`, { method: "DELETE" });
 
-// --- Hostel Management Functions ---
+export const fetchBedsByHostelApi = (name = "") => 
+  fetchWithAuth(name ? `/beds/search?hostelName=${encodeURIComponent(name)}` : "/beds");
 
-export const fetchHostelsApi = async (name = "") => {
-  const endpoint = name ? `/hostels?name=${encodeURIComponent(name)}` : "/hostels";
-  const response = await fetchWithAuth(endpoint, { method: "GET" });
-  if (!response.ok) throw new Error("Failed to fetch hostels");
-  return response.json();
-};
-
-export const createHostelApi = async (hostelData) => {
-  const response = await fetchWithAuth("/hostels", {
-    method: "POST",
-    body: JSON.stringify(hostelData),
-  });
-  if (!response.ok) throw new Error("Failed to create hostel");
-  return response.json();
-};
-
-export const updateHostelApi = async (id, hostelData) => {
-  const response = await fetchWithAuth(`/hostels/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(hostelData),
-  });
-  if (!response.ok) throw new Error("Failed to update hostel");
-  return response.json();
-};
-
-export const deleteHostelApi = async (id) => {
-  const response = await fetchWithAuth(`/hostels/${id}`, { method: "DELETE" });
-  if (!response.ok) throw new Error("Failed to delete hostel");
-  return response;
-};
+export const fetchAvailableBedsApi = (roomId) => fetchWithAuth(`/beds/available?roomId=${roomId}`);
+export const createBedApi = (data) => fetchWithAuth("/beds", { method: "POST", body: JSON.stringify(data) });
+export const updateBedApi = (id, data) => fetchWithAuth(`/beds/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteBedApi = (id) => fetchWithAuth(`/beds/${id}`, { method: "DELETE" });
