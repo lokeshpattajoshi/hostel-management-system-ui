@@ -5,7 +5,8 @@ import HostelManagementApp from "./HostelManagementApp";
 import RoomManagementApp from "./RoomManagementApp"; 
 import BedManagementApp from "./BedManagementApp"; 
 import TenantManagementApp from "./TenantManagementApp";
-import ExpenseManagementApp from "./ExpenseManagementApp"; // 1. Imported Expense Module
+import ExpenseManagementApp from "./ExpenseManagementApp"; 
+import IncomeManagementApp from "./IncomeManagementApp"; // <-- 1. IMPORTED INCOME APP
 
 function HomePage() {
   const [activeModule, setActiveModule] = useState("DASHBOARD");
@@ -14,10 +15,11 @@ function HomePage() {
   const [roomSubView, setRoomSubView] = useState("VIEW"); 
   const [bedSubView, setBedSubView] = useState("VIEW"); 
   const [tenantSubView, setTenantSubView] = useState("VIEW");
-  const [expenseSubView, setExpenseSubView] = useState("VIEW"); // 2. Added Expense State
+  const [expenseSubView, setExpenseSubView] = useState("VIEW"); 
+  const [incomeSubView, setIncomeSubView] = useState("VIEW"); // <-- 2. ADDED INCOME STATE
   
   const navigate = useNavigate();
-  const modules = ["Users", "Hostels", "Rooms", "Beds", "Tenants", "Expenses"];
+  const modules = ["Users", "Hostels", "Rooms", "Beds", "Tenants", "Expenses", "Incomes", "Reports"];
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -42,7 +44,8 @@ function HomePage() {
     if (moduleName === "Rooms") setRoomSubView(viewType);
     if (moduleName === "Beds") setBedSubView(viewType);
     if (moduleName === "Tenants") setTenantSubView(viewType);
-    if (moduleName === "Expenses") setExpenseSubView(viewType); // 3. Added Expense Logic
+    if (moduleName === "Expenses") setExpenseSubView(viewType); 
+    if (moduleName === "Incomes") setIncomeSubView(viewType); // <-- 3. INCOME NAVIGATION
     
     setActiveModule(moduleName);
   };
@@ -70,21 +73,35 @@ function HomePage() {
     if (activeModule === "Rooms") return <div>{backButton}<RoomManagementApp initialView={roomSubView} /></div>;
     if (activeModule === "Beds") return <div>{backButton}<BedManagementApp initialView={bedSubView} /></div>;
     if (activeModule === "Tenants") return <div>{backButton}<TenantManagementApp initialView={tenantSubView} /></div>;
-    
-    // 4. Added Route for Expenses
     if (activeModule === "Expenses") return <div>{backButton}<ExpenseManagementApp initialView={expenseSubView} /></div>;
+    
+    // <-- 4. MOUNTED INCOME APP INTERFACE HERE TO FIX CHIPS DISPLAY -->
+    if (activeModule === "Incomes") {
+      return (
+        <div>
+          {backButton}
+          <IncomeManagementApp initialView={incomeSubView} />
+        </div>
+      );
+    }
+
+    if (activeModule === "Reports") {
+      return (
+        <div>
+          {backButton}
+          <div style={{ background: "#fff", padding: "30px", borderRadius: "8px", textAlign: "center", border: "1px solid #eee" }}>
+            <h3>System Reports & Financial Ledger Statements</h3>
+            <p style={{ color: "#666" }}>Analytical tools are currently being updated.</p>
+          </div>
+        </div>
+      );
+    }
 
     // DASHBOARD VIEW
     return (
       <>
         <h2 style={{ textAlign: "center", marginBottom: "20px" }}>Dashboard</h2>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-            gap: "20px",
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "20px" }}>
           {modules.map((item) => (
             <div
               key={item}
@@ -100,41 +117,39 @@ function HomePage() {
               <h3 style={{ borderBottom: "1px solid #eee", paddingBottom: "10px" }}>{item}</h3>
               <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "15px" }}>
                 
-                <button
-                  onClick={() => handleModuleNavigation(item, "CREATE")}
-                  style={btnStyle}
-                >
-                  Create
-                </button>
-
-                <button
-                  onClick={() => handleModuleNavigation(item, "VIEW")}
-                  style={btnStyle}
-                >
-                  View All
-                </button>
-
-                {item === "Beds" && (
-                  <button 
-                    onClick={() => handleModuleNavigation("Beds", "AVAILABLE")} 
-                    style={{
-                      ...btnStyle, 
-                      background: "#e7f3ff", 
-                      color: "#007bff", 
-                      borderColor: "#007bff",
-                      fontWeight: "bold"
-                    }}
+                {item === "Reports" ? (
+                  <button
+                    onClick={() => handleModuleNavigation(item, "VIEW")}
+                    style={{ ...btnStyle, background: "#f8f9fa", fontWeight: "bold" }}
                   >
-                    Check Availability Map
+                    Open Executive Summary
                   </button>
-                )}
+                ) : (
+                  <>
+                    <button onClick={() => handleModuleNavigation(item, "CREATE")} style={btnStyle}>
+                      Create
+                    </button>
 
-                <button
-                  onClick={() => handleModuleNavigation(item, "VIEW")}
-                  style={btnStyle}
-                >
-                  Modify
-                </button>
+                    <button onClick={() => handleModuleNavigation(item, "VIEW")} style={btnStyle}>
+                      View All
+                    </button>
+
+                    {item === "Beds" && (
+                      <button 
+                        onClick={() => handleModuleNavigation("Beds", "AVAILABLE")} 
+                        style={{
+                          ...btnStyle, background: "#e7f3ff", color: "#007bff", borderColor: "#007bff", fontWeight: "bold"
+                        }}
+                      >
+                        Check Availability Map
+                      </button>
+                    )}
+
+                    <button onClick={() => handleModuleNavigation(item, "VIEW")} style={btnStyle}>
+                      Modify
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}

@@ -61,8 +61,8 @@ export const deleteHostelApi = (id) => fetchWithAuth(`/hostels/${id}`, { method:
 
 // --- ROOMS ---
 export const fetchRoomsApi = () => fetchWithAuth("/rooms");
-// Added alias to fix the import error in AvailableBeds.jsx
-export const fetchRoomsByHostelApi = (hostelId) => fetchWithAuth(`/rooms?hostelId=${hostelId}`);
+// FIXED: Changed from `/rooms/hostel/${hostelId}` to direct path path `/rooms/${hostelId}`
+export const fetchRoomsByHostelApi = (hostelId) => fetchWithAuth(`/rooms/${hostelId}`);
 export const fetchRoomsByHostelNameApi = (name) => fetchWithAuth(`/rooms/search?hostelName=${encodeURIComponent(name)}`);
 export const createRoomApi = (data) => fetchWithAuth("/rooms", { method: "POST", body: JSON.stringify(data) });
 export const updateRoomApi = (id, data) => fetchWithAuth(`/rooms/${id}`, { method: "PUT", body: JSON.stringify(data) });
@@ -93,3 +93,25 @@ export const searchExpensesApi = (type) => fetchWithAuth(`/expenses?expenseType=
 export const createExpenseApi = (data) => fetchWithAuth("/expenses", { method: "POST", body: JSON.stringify(data) });
 export const updateExpenseApi = (id, data) => fetchWithAuth(`/expenses/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteExpenseApi = (id) => fetchWithAuth(`/expenses/${id}`, { method: "DELETE" });
+
+// --- INCOME MANAGEMENT ---
+export const getIncomeByIdApi = (incomeId) => fetchWithAuth(`/income/${incomeId}`);
+export const createIncomeApi = (data) => fetchWithAuth("/income", { method: "POST", body: JSON.stringify(data) });
+export const updateIncomeApi = (id, data) => fetchWithAuth(`/income/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteIncomeApi = (id) => fetchWithAuth(`/income/${id}`, { method: "DELETE" });
+
+/**
+ * Searches income dynamically using your criteria endpoints setup
+ */
+export const searchIncomeApi = (filters) => {
+  const params = new URLSearchParams();
+  Object.keys(filters).forEach(key => {
+    if (filters[key] !== undefined && filters[key] !== "") {
+      params.append(key, filters[key]);
+    }
+  });
+  return fetchWithAuth(`/income?${params.toString()}`);
+};
+
+export const fetchPendingTenantChargesApi = (tenantId) => 
+  fetchWithAuth(`/tenant-charges?tenantId=${tenantId}&status=PENDING`);
