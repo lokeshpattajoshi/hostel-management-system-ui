@@ -6,7 +6,8 @@ import RoomManagementApp from "./RoomManagementApp";
 import BedManagementApp from "./BedManagementApp"; 
 import TenantManagementApp from "./TenantManagementApp";
 import ExpenseManagementApp from "./ExpenseManagementApp"; 
-import IncomeManagementApp from "./IncomeManagementApp"; // <-- 1. IMPORTED INCOME APP
+import IncomeManagementApp from "./IncomeManagementApp"; 
+import ReportManagement from "./ReportManagement";
 
 function HomePage() {
   const [activeModule, setActiveModule] = useState("DASHBOARD");
@@ -16,26 +17,41 @@ function HomePage() {
   const [bedSubView, setBedSubView] = useState("VIEW"); 
   const [tenantSubView, setTenantSubView] = useState("VIEW");
   const [expenseSubView, setExpenseSubView] = useState("VIEW"); 
-  const [incomeSubView, setIncomeSubView] = useState("VIEW"); // <-- 2. ADDED INCOME STATE
+  const [incomeSubView, setIncomeSubView] = useState("VIEW");
   
   const navigate = useNavigate();
   const modules = ["Users", "Hostels", "Rooms", "Beds", "Tenants", "Expenses", "Incomes", "Reports"];
 
+  const executeSessionTermination = () => {
+    localStorage.clear();
+    navigate("/", { replace: true });
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
-      navigate("/", { replace: true });
+      executeSessionTermination();
     }
+
+    const handleGlobalAuthFailure = (event) => {
+      if (event.detail && event.detail.status === 401) {
+        alert("Your session has expired or you are unauthorized. Redirecting to login...");
+        executeSessionTermination();
+      }
+    };
+
+    window.addEventListener("api-auth-failure", handleGlobalAuthFailure);
+    return () => {
+      window.removeEventListener("api-auth-failure", handleGlobalAuthFailure);
+    };
   }, [navigate]);
 
   const handleLogout = () => {
     if (window.confirm("Are you sure you want to logout?")) {
-      localStorage.clear();
-      navigate("/", { replace: true });
+      executeSessionTermination();
     }
   };
 
-  // --- Unified Click Handler ---
   const handleModuleNavigation = (moduleName, viewType) => {
     console.log(`Navigating to ${moduleName} with view ${viewType}`);
     
@@ -45,7 +61,7 @@ function HomePage() {
     if (moduleName === "Beds") setBedSubView(viewType);
     if (moduleName === "Tenants") setTenantSubView(viewType);
     if (moduleName === "Expenses") setExpenseSubView(viewType); 
-    if (moduleName === "Incomes") setIncomeSubView(viewType); // <-- 3. INCOME NAVIGATION
+    if (moduleName === "Incomes") setIncomeSubView(viewType); 
     
     setActiveModule(moduleName);
   };
@@ -67,7 +83,6 @@ function HomePage() {
       </button>
     );
 
-    // Module Routing Logic
     if (activeModule === "Users") return <div>{backButton}<UserManagementApp initialView={userSubView} /></div>;
     if (activeModule === "Hostels") return <div>{backButton}<HostelManagementApp initialView={hostelSubView} /></div>;
     if (activeModule === "Rooms") return <div>{backButton}<RoomManagementApp initialView={roomSubView} /></div>;
@@ -75,7 +90,6 @@ function HomePage() {
     if (activeModule === "Tenants") return <div>{backButton}<TenantManagementApp initialView={tenantSubView} /></div>;
     if (activeModule === "Expenses") return <div>{backButton}<ExpenseManagementApp initialView={expenseSubView} /></div>;
     
-    // <-- 4. MOUNTED INCOME APP INTERFACE HERE TO FIX CHIPS DISPLAY -->
     if (activeModule === "Incomes") {
       return (
         <div>
@@ -89,15 +103,11 @@ function HomePage() {
       return (
         <div>
           {backButton}
-          <div style={{ background: "#fff", padding: "30px", borderRadius: "8px", textAlign: "center", border: "1px solid #eee" }}>
-            <h3>System Reports & Financial Ledger Statements</h3>
-            <p style={{ color: "#666" }}>Analytical tools are currently being updated.</p>
-          </div>
+          <ReportManagement />
         </div>
       );
     }
 
-    // DASHBOARD VIEW
     return (
       <>
         <h2 style={{ textAlign: "center", marginBottom: "20px" }}>Dashboard</h2>
@@ -118,12 +128,21 @@ function HomePage() {
               <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "15px" }}>
                 
                 {item === "Reports" ? (
-                  <button
-                    onClick={() => handleModuleNavigation(item, "VIEW")}
-                    style={{ ...btnStyle, background: "#f8f9fa", fontWeight: "bold" }}
-                  >
-                    Open Executive Summary
-                  </button>
+                  <>
+                    <button
+                      onClick={() => handleModuleNavigation(item, "VIEW")}
+                      style={{ ...btnStyle, background: "#e7f3ff", color: "#007bff", borderColor: "#007bff", fontWeight: "bold" }}
+                    >
+                      📈 View Report
+                    </button>
+                    
+                    <button
+                      onClick={() => handleModuleNavigation(item, "VIEW")}
+                      style={{ ...btnStyle, background: "#f8f9fa" }}
+                    >
+                      Open Executive Summary
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button onClick={() => handleModuleNavigation(item, "CREATE")} style={btnStyle}>
@@ -171,7 +190,22 @@ function HomePage() {
           boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
         }}
       >
-        <h2 style={{ margin: 0, fontSize: "20px" }}>Hostel Management</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <img 
+            src="/logo.jpg" 
+            alt="Hostel Management Logo" 
+            style={{ 
+              width: "40px", 
+              height: "40px", 
+              borderRadius: "6px", 
+              objectFit: "cover",
+              background: "#fff",
+              border: "1px solid rgba(255, 255, 255, 0.2)"
+            }} 
+          />
+          <h2 style={{ margin: 0, fontSize: "20px", fontWeight: "600" }}>Hostel Management</h2>
+        </div>
+        
         <button onClick={handleLogout} style={logoutBtnStyle}>Logout</button>
       </nav>
 

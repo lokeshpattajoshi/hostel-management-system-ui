@@ -4,7 +4,7 @@ import {
   fetchRoomsByHostelApi, 
   fetchAvailableBedsApi, 
   createTenantApi,
-  fetchAdminUsersApi 
+  fetchUsersApi 
 } from "../services/api";
 
 const CreateTenant = ({ onCancel }) => {
@@ -23,12 +23,14 @@ const CreateTenant = ({ onCancel }) => {
     guardianPhone: "",
     bedId: "",
     checkInDate: new Date().toISOString().split('T')[0],
-    onboardedBy: "",
+    onboardedBy: "", 
     isActive: true,
     chargeType: "RENT",
     billingCycle: "MONTHLY",
     totalAmount: "",
     paidAmount: "",
+    paymentMode: "CASH", // Added with a standard default value
+    transactionId: "",   // Added to track operational references
     dueDate: "",
     remarks: ""
   });
@@ -36,16 +38,28 @@ const CreateTenant = ({ onCancel }) => {
   const [hostels, setHostels] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [beds, setBeds] = useState([]);
-  const [admins, setAdmins] = useState([]);
+  const [systemUsers, setSystemUsers] = useState([]); 
   const [selectedHostel, setSelectedHostel] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("");
+  const [errorStatus, setErrorStatus] = useState("");
 
   useEffect(() => {
     const loadData = async () => {
-      const hData = await fetchHostelsApi();
-      const aData = await fetchAdminUsersApi();
-      setHostels(hData || []);
-      setAdmins(aData || []);
+      try {
+        const hData = await fetchHostelsApi();
+        setHostels(hData || []);
+
+        const uData = await fetchUsersApi();
+        const usersList = uData || [];
+        setSystemUsers(usersList);
+
+        if (usersList.length > 0) {
+          const firstUserId = usersList[0].id || usersList[0].userId;
+          setFormData(prev => ({ ...prev, onboardedBy: String(firstUserId) }));
+        }
+      } catch (err) {
+        console.error("Error loading master onboarding options layout:", err);
+      }
     };
     loadData();
   }, []);
@@ -54,15 +68,12 @@ const CreateTenant = ({ onCancel }) => {
     const hId = e.target.value; 
     setSelectedHostel(hId);
     
-    // Reset dependent dropdowns
     setRooms([]); 
     setSelectedRoom(""); 
     setBeds([]);
 
     if (hId) {
-      // Calls http://localhost:8080/api/rooms/{hId}
       const rData = await fetchRoomsByHostelApi(hId);
-      // Condition removed: showing all rooms returned by the API
       setRooms(rData || []);
     }
   };
@@ -86,27 +97,49 @@ const CreateTenant = ({ onCancel }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorStatus("");
+
+    const parsedOnboardedBy = parseInt(formData.onboardedBy);
+    
+    if (!formData.onboardedBy || isNaN(parsedOnboardedBy)) {
+      setErrorStatus("A valid Staff/User must be selected to process this onboarding.");
+      return;
+    }
+
     const payload = {
       ...formData,
       age: parseInt(formData.age) || 0,
       bedId: parseInt(formData.bedId),
-      onboardedBy: parseInt(formData.onboardedBy),
+      onboardedBy: parsedOnboardedBy,
       totalAmount: parseFloat(formData.totalAmount) || 0,
       paidAmount: parseFloat(formData.paidAmount) || 0,
-      // Generic placeholder used for Aadhaar in compliance with privacy protocols
+      // paymentMode and transactionId are cleanly passed via spreading ...formData
       guardianAadhar: formData.guardianIdentityType === "AADHAR" ? formData.guardianIdentityNumber : null
     };
 
-    const response = await createTenantApi(payload);
-    if (response) {
-      alert("Tenant onboarded successfully!");
-      onCancel();
+    try {
+      const response = await createTenantApi(payload);
+      if (response) {
+        alert("Tenant onboarded successfully!");
+        onCancel();
+      } else {
+        setErrorStatus("Server rejected transaction. Please verify database parameters match.");
+      }
+    } catch (err) {
+      setErrorStatus("Network failure: " + err.message);
     }
   };
 
   return (
     <div style={containerStyle}>
       <h3 style={{ borderBottom: "2px solid #007bff", paddingBottom: "10px" }}>Onboard New Tenant</h3>
+      
+      {errorStatus && (
+        <div style={{ padding: "10px", marginBottom: "15px", backgroundColor: "#f8d7da", color: "#721c24", borderRadius: "4px", border: "1px solid #f5c6cb" }}>
+          {errorStatus}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} style={formGrid}>
         
         {/* SECTION 1: PERSONAL INFORMATION */}
@@ -187,9 +220,18 @@ const CreateTenant = ({ onCancel }) => {
           <label style={labelStyle}>Check-in Date</label>
           <input type="date" name="checkInDate" value={formData.checkInDate} onChange={handleChange} required style={inputStyle} />
           
-          <select name="onboardedBy" onChange={handleChange} required style={inputStyle}>
-            <option value="">Admin</option>
-            {admins.map(a => <option key={a.id} value={a.id}>{a.fullName}</option>)}
+          <label style={labelStyle}>Onboarded By (System User/Staff)</label>
+          <select 
+            name="onboardedBy" 
+            value={formData.onboardedBy} 
+            onChange={handleChange} 
+            required 
+            style={inputStyle}
+          >
+            {systemUsers.map(u => {
+              const uId = u.id || u.userId;
+              return <option key={uId} value={uId}>{u.fullName || u.username || `User #${uId}`}</option>;
+            })}
           </select>
         </section>
 
@@ -203,7 +245,27 @@ const CreateTenant = ({ onCancel }) => {
             </select>
             <input type="number" name="totalAmount" placeholder="Total" onChange={handleChange} required style={inputStyle} />
           </div>
+          
           <input type="number" name="paidAmount" placeholder="Paid Now" onChange={handleChange} required style={inputStyle} />
+          
+          {/* NEW FIELD: Payment Mode Dropdown Component */}
+          <select name="paymentMode" value={formData.paymentMode} onChange={handleChange} style={inputStyle}>
+            <option value="CASH">Cash</option>
+            <option value="UPI">UPI / QR Code</option>
+            <option value="NET_BANKING">Net Banking</option>
+            <option value="CARD">Credit / Debit Card</option>
+          </select>
+
+          {/* NEW FIELD: Transaction ID Reference Input Element */}
+          <input 
+            type="text" 
+            name="transactionId" 
+            value={formData.transactionId} 
+            placeholder="Transaction ID / Ref No. (Optional)" 
+            onChange={handleChange} 
+            style={inputStyle} 
+          />
+
           <label style={labelStyle}>Due Date</label>
           <input type="date" name="dueDate" onChange={handleChange} required style={inputStyle} />
           <input type="text" name="remarks" placeholder="Remarks" onChange={handleChange} style={inputStyle} />

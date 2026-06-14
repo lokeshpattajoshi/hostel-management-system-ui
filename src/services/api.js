@@ -2,7 +2,7 @@ const API_BASE_URL = "http://localhost:8080/api";
 
 /**
  * Robust helper to handle Authentication and JSON parsing safely.
- * Prevents "Unexpected end of JSON input" by checking content length.
+ * Enforces array type protections to systematically prevent ".filter() is not a function" crashes.
  */
 export const fetchWithAuth = async (endpoint, options = {}) => {
   const token = localStorage.getItem("token");
@@ -12,9 +12,11 @@ export const fetchWithAuth = async (endpoint, options = {}) => {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
 
-    // Handle Session Expiry
+    // Handle Session Expiry / Unauthorized Access
     if (response.status === 401) {
-      localStorage.removeItem("token");
+      const authEvent = new CustomEvent("api-auth-failure", { detail: { status: 401 } });
+      window.dispatchEvent(authEvent);
+      localStorage.clear();
       window.location.href = "/";
       return null;
     }
@@ -26,7 +28,15 @@ export const fetchWithAuth = async (endpoint, options = {}) => {
     if (!text) return []; 
 
     try {
-      return JSON.parse(text); 
+      const parsedData = JSON.parse(text);
+      
+      // Intercept backend Error/Exception JSON objects to preserve React loops
+      if (parsedData && typeof parsedData === "object" && (parsedData.status || parsedData.error)) {
+        console.warn(`Intercepted a backend error object on ${endpoint}:`, parsedData);
+        return [];
+      }
+      
+      return parsedData;
     } catch (e) {
       return text; // Return as string if not valid JSON
     }
@@ -61,8 +71,7 @@ export const deleteHostelApi = (id) => fetchWithAuth(`/hostels/${id}`, { method:
 
 // --- ROOMS ---
 export const fetchRoomsApi = () => fetchWithAuth("/rooms");
-// FIXED: Changed from `/rooms/hostel/${hostelId}` to direct path path `/rooms/${hostelId}`
-export const fetchRoomsByHostelApi = (hostelId) => fetchWithAuth(`/rooms/${hostelId}`);
+export const fetchRoomsByHostelApi = (hostelId) => fetchWithAuth(`/rooms/hostel/${hostelId}`);
 export const fetchRoomsByHostelNameApi = (name) => fetchWithAuth(`/rooms/search?hostelName=${encodeURIComponent(name)}`);
 export const createRoomApi = (data) => fetchWithAuth("/rooms", { method: "POST", body: JSON.stringify(data) });
 export const updateRoomApi = (id, data) => fetchWithAuth(`/rooms/${id}`, { method: "PUT", body: JSON.stringify(data) });
@@ -100,9 +109,6 @@ export const createIncomeApi = (data) => fetchWithAuth("/income", { method: "POS
 export const updateIncomeApi = (id, data) => fetchWithAuth(`/income/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteIncomeApi = (id) => fetchWithAuth(`/income/${id}`, { method: "DELETE" });
 
-/**
- * Searches income dynamically using your criteria endpoints setup
- */
 export const searchIncomeApi = (filters) => {
   const params = new URLSearchParams();
   Object.keys(filters).forEach(key => {
@@ -115,3 +121,37 @@ export const searchIncomeApi = (filters) => {
 
 export const fetchPendingTenantChargesApi = (tenantId) => 
   fetchWithAuth(`/tenant-charges?tenantId=${tenantId}&status=PENDING`);
+
+export const fetchDashboardSummaryApi = async (payload) => {
+  try {
+    return await fetchWithAuth("/reports/dashboard-summary", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    console.error("Error generating dashboard summary parameters:", error);
+    return null;
+  }
+};
+
+export const fetchIncomeReportDetailsApi = async (hostelId, startDate, endDate) => {
+  try {
+    const url = `/income?hostelId=${hostelId}&startDate=${startDate}&endDate=${endDate}`;
+    return await fetchWithAuth(url);
+  } catch (error) {
+    console.error("Error routing out income detailed report:", error);
+    return [];
+  }
+};
+
+// --- REFINED EXPENSE REPORT METHOD ---
+export const fetchExpenseReportDetailsApi = async (hostelId, startDate, endDate) => {
+  try {
+    // Standard URL format matching query payload parameters
+    const url = `/expenses/hostel/${hostelId}/date-range?startDate=${startDate}&endDate=${endDate}`;
+    return await fetchWithAuth(url);
+  } catch (error) {
+    console.error("Error routing out expense detailed report:", error);
+    return [];
+  }
+};

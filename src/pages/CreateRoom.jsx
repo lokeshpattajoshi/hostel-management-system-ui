@@ -11,13 +11,31 @@ const CreateRoom = ({ onSave, onCancel }) => {
   });
 
   useEffect(() => {
-    fetchHostelsApi().then(setHostels).catch(() => alert("Error loading hostels"));
+    fetchHostelsApi()
+      .then((data) => {
+        // SAFE CHECK: Ensure the incoming backend data payload is a proper array
+        if (data && Array.isArray(data)) {
+          setHostels(data);
+        } else if (data && typeof data === "object" && data.hostelId) {
+          // Wrap single object responses in an array safely
+          setHostels([data]);
+        } else {
+          setHostels([]);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load hostels list:", err);
+        alert("Error loading hostels");
+      });
   }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
+
+  // Safe reference wrapper to prevent rendering crashes if state gets corrupted
+  const safeHostelsList = Array.isArray(hostels) ? hostels : [];
 
   return (
     <div style={{ padding: "20px", background: "#fff", border: "1px solid #28a745", borderRadius: "8px" }}>
@@ -27,7 +45,12 @@ const CreateRoom = ({ onSave, onCancel }) => {
           <label>Assign to Hostel</label>
           <select name="hostelId" value={formData.hostelId} onChange={handleChange} style={inputStyle}>
             <option value="">-- Select Hostel --</option>
-            {hostels.map(h => <option key={h.hostelId} value={h.hostelId}>{h.hostelName}</option>)}
+            {/* Using the safeHostelsList prevents map crashes */}
+            {safeHostelsList.map(h => (
+              <option key={h.hostelId} value={h.hostelId}>
+                {h.hostelName}
+              </option>
+            ))}
           </select>
         </div>
         <div>

@@ -15,7 +15,7 @@ const AvailableBeds = () => {
     fetchHostelsApi().then(data => setHostels(data || []));
   }, []);
 
-  // 2. TRIGGER: When Hostel changes, fetch Rooms for that Hostel
+  // 2. TRIGGER: Fetch rooms dynamically using the specific selected hostel id
   const handleHostelChange = async (e) => {
     const hostelId = e.target.value;
     const hostelObj = hostels.find(h => String(h.hostelId) === String(hostelId));
@@ -25,18 +25,25 @@ const AvailableBeds = () => {
     setBeds([]); // Clear beds display
     setRooms([]); // Clear rooms list
 
-    if (hostelId) {
-      setLoading(true);
-      try {
-        const allRooms = await fetchRoomsByHostelApi();
-        // Filter rooms belonging to this hostel
-        const filteredRooms = allRooms.filter(r => String(r.hostelId) === String(hostelId));
-        setRooms(filteredRooms);
-      } catch (err) {
-        console.error("Error fetching rooms:", err);
-      } finally {
-        setLoading(false);
+    // FIXED: Added guard condition to prevent endpoint traffic if placeholder option is picked
+    if (!hostelId || hostelId === "undefined") {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // FIXED: Passed the actual hostelId parameter so it cleanly paths to /rooms/hostel/{hostelId}
+      const hostelRooms = await fetchRoomsByHostelApi(hostelId);
+      if (hostelRooms && Array.isArray(hostelRooms)) {
+        setRooms(hostelRooms);
+      } else {
+        setRooms([]);
       }
+    } catch (err) {
+      console.error("Error fetching rooms:", err);
+      setRooms([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -51,11 +58,17 @@ const AvailableBeds = () => {
       try {
         // Fetch beds for the specific hostel name
         const allBeds = await fetchBedsByHostelApi(selectedHostel.hostelName);
-        // Filter beds belonging to this specific roomId
-        const filteredBeds = allBeds.filter(b => String(b.roomId) === String(roomId));
-        setBeds(filteredBeds);
+        
+        if (allBeds && Array.isArray(allBeds)) {
+          // Filter beds belonging to this specific roomId
+          const filteredBeds = allBeds.filter(b => String(b.roomId) === String(roomId));
+          setBeds(filteredBeds);
+        } else {
+          setBeds([]);
+        }
       } catch (err) {
         console.error("Error fetching beds:", err);
+        setBeds([]);
       } finally {
         setLoading(false);
       }
@@ -90,11 +103,15 @@ const AvailableBeds = () => {
           <label style={labelStyle}>Step 2: Select Room</label>
           <select 
             value={selectedRoomId} 
-            disabled={!selectedHostel || loading}
+            disabled={!selectedHostel || loading || rooms.length === 0}
             onChange={handleRoomChange} 
-            style={{...selectStyle, opacity: !selectedHostel ? 0.5 : 1}}
+            style={{...selectStyle, opacity: !selectedHostel || rooms.length === 0 ? 0.5 : 1}}
           >
-            <option value="">-- Select a Room --</option>
+            <option value="">
+              {selectedHostel 
+                ? (rooms.length > 0 ? "-- Select a Room --" : "-- No Rooms Found --") 
+                : "-- Choose Hostel First --"}
+            </option>
             {rooms.map(r => (
               <option key={r.roomId} value={r.roomId}>
                 Room {r.roomNumber} ({r.roomType})
@@ -108,7 +125,7 @@ const AvailableBeds = () => {
       <div style={{ marginTop: "40px" }}>
         {!selectedRoomId ? (
           <div style={emptyStateStyle}>
-            {loading ? "Updating..." : "Please complete the selections above to see beds."}
+            {loading ? "Updating data view..." : "Please complete the selections above to see beds."}
           </div>
         ) : (
           <div>
@@ -131,7 +148,9 @@ const AvailableBeds = () => {
                   </div>
                 ))
               ) : (
-                <p style={{ textAlign: "center", gridColumn: "1/-1" }}>No beds found in this room.</p>
+                <p style={{ textAlign: "center", gridColumn: "1/-1", color: "#6c757d" }}>
+                  No beds configured in this room yet.
+                </p>
               )}
             </div>
           </div>
