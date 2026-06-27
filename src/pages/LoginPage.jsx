@@ -31,25 +31,18 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      // 1. Call the login function
-      const response = await login(email, password);
+      // 1. Call the login function (now returns a clean data object or error object)
+      const data = await login(email, password);
 
-      // 2. IMPORTANT: Since our api.js returns the raw 'response' for login 
-      // (as seen in the login function we wrote earlier), we handle it here:
-      if (response.ok) {
-        const data = await response.json(); // Still need .json() for the raw login fetch
-        
-        if (data && data.token) {
-          localStorage.setItem("token", data.token);
-          navigate("/home");
-        } else {
-          setError("Invalid login response from server");
-        }
+      // 2. Check if the backend sent back an error field or if it has the token
+      if (data && data.error) {
+        setError(data.error);
+      } else if (data && data.token) {
+        // ✅ Success! Save the token and redirect to home
+        localStorage.setItem("token", data.token);
+        navigate("/home");
       } else {
-        // If the email is coming back as null on the backend, 
-        // double-check the 'login' function in api.js 
-        // matches the keys { email, password }
-        setError("Invalid email or password.");
+        setError("Invalid login response from server");
       }
     } catch (err) {
       setError("Connection failed. Please try again.");
@@ -101,7 +94,7 @@ function LoginPage() {
             Email Address
           </label>
           <input
-            type="email" // Changed from text to email for better validation
+            type="email"
             name="email"
             placeholder="Enter email"
             value={email}
@@ -151,7 +144,7 @@ const inputStyle = {
   padding: "10px",
   border: "1px solid #ccc",
   borderRadius: "4px",
-  boxSizing: "border-box", // Prevents input from overflowing form width
+  boxSizing: "border-box",
 };
 
 export default LoginPage;

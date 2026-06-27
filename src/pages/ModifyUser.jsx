@@ -9,6 +9,7 @@ const ModifyUser = ({ user, onUpdate, onCancel }) => {
     phoneNumber: user.phoneNumber || "",
     role: user.role || "TENANT",
     isActive: user.isActive ?? true,
+    passwordHash: "",
   });
 
   const [errors, setErrors] = useState({});
@@ -22,6 +23,10 @@ const ModifyUser = ({ user, onUpdate, onCancel }) => {
       tempErrors.email = "Invalid email format";
     }
     if (!formData.role) tempErrors.role = "Role is required";
+    
+    if (formData.passwordHash && formData.passwordHash.length < 6) {
+      tempErrors.passwordHash = "Password must be at least 6 characters long";
+    }
 
     setErrors(tempErrors);
     return Object.keys(tempErrors).length === 0;
@@ -63,6 +68,22 @@ const ModifyUser = ({ user, onUpdate, onCancel }) => {
           onChange={handleInputChange}
         />
         {errors.email && <p style={{ color: "red", fontSize: "12px", margin: "4px 0" }}>{errors.email}</p>}
+      </div>
+
+      {/* Password Field (passwordHash) */}
+      <div style={{ marginBottom: "15px" }}>
+        <label style={{ display: "block", marginBottom: "5px" }}>
+          New Password <span style={{ fontSize: "12px", color: "#666" }}>(Leave blank to keep current)</span>
+        </label>
+        <input
+          name="passwordHash"
+          type="password"
+          placeholder="Enter new password"
+          style={{ width: "100%", padding: "8px", boxSizing: "border-box" }}
+          value={formData.passwordHash}
+          onChange={handleInputChange}
+        />
+        {errors.passwordHash && <p style={{ color: "red", fontSize: "12px", margin: "4px 0" }}>{errors.passwordHash}</p>}
       </div>
 
       {/* Phone Number */}

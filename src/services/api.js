@@ -1,4 +1,6 @@
-const API_BASE_URL = "http://localhost:8080/api";
+// --- CRITICAL CONFIGURATION ---
+// Using process.env to match Create React App specs
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 /**
  * Robust helper to handle Authentication and JSON parsing safely.
@@ -48,11 +50,25 @@ export const fetchWithAuth = async (endpoint, options = {}) => {
 
 // --- AUTH ---
 export const login = async (email, password) => {
-  return await fetch(`${API_BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    // If the server returns an error status (like 400 or 401)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return { error: errorData.message || "Invalid credentials" };
+    }
+
+    // Safely parse the response into a JSON object (contains your token, etc.)
+    return await response.json();
+  } catch (error) {
+    console.error("Login Network Error:", error);
+    return { error: "Cannot connect to server. Please check your connection." };
+  }
 };
 
 // --- USERS ---
@@ -122,6 +138,7 @@ export const searchIncomeApi = (filters) => {
 export const fetchPendingTenantChargesApi = (tenantId) => 
   fetchWithAuth(`/tenant-charges?tenantId=${tenantId}&status=PENDING`);
 
+// --- RESTORED REPORTING METHODS ---
 export const fetchDashboardSummaryApi = async (payload) => {
   try {
     return await fetchWithAuth("/reports/dashboard-summary", {
@@ -144,10 +161,8 @@ export const fetchIncomeReportDetailsApi = async (hostelId, startDate, endDate) 
   }
 };
 
-// --- REFINED EXPENSE REPORT METHOD ---
 export const fetchExpenseReportDetailsApi = async (hostelId, startDate, endDate) => {
   try {
-    // Standard URL format matching query payload parameters
     const url = `/expenses/hostel/${hostelId}/date-range?startDate=${startDate}&endDate=${endDate}`;
     return await fetchWithAuth(url);
   } catch (error) {
