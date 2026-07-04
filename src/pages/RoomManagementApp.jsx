@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { createRoomApi, updateRoomApi, deleteRoomApi } from "../services/api";
+// ✅ Imported createBedApi alongside room endpoints
+import { createRoomApi, updateRoomApi, deleteRoomApi, createBedApi } from "../services/api";
 import ViewRooms from "./ViewRooms";
 import CreateRoom from "./CreateRoom";
 import ModifyRoom from "./ModifyRoom";
@@ -19,8 +20,28 @@ const RoomManagementApp = ({ initialView = "VIEW" }) => {
   const handleSave = async (data) => {
     try {
       if (view === "CREATE") {
-        await createRoomApi(data);
-        alert("Room created successfully!");
+        // 1. Send the request to create the base room object
+        const newRoom = await createRoomApi(data);
+        
+        // 2. Automate bed generation if the room was created successfully and has a capacity
+        if (newRoom && newRoom.roomId && data.capacity) {
+          const bedCapacity = parseInt(data.capacity, 10) || 0;
+          
+          console.log(`Room created with ID: ${newRoom.roomId}. Generating ${bedCapacity} beds...`);
+          
+          // Use a strict sequential for-loop to keep database operations synchronized
+          for (let i = 1; i <= bedCapacity; i++) {
+            const bedPayload = {
+              roomId: newRoom.roomId,
+              bedNumber: `Bed-${i}`, // Creates "Bed-1", "Bed-2", "Bed-3", etc.
+              isAvailable: true      // Default active status
+            };
+            
+            await createBedApi(bedPayload);
+          }
+        }
+        
+        alert(`Room created successfully along with its ${data.capacity || 0} automated beds!`);
       } else {
         await updateRoomApi(data.roomId, data);
         alert("Room updated successfully!");
