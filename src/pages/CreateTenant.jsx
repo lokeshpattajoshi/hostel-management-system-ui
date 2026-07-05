@@ -311,6 +311,7 @@ const CreateTenant = ({ onCancel }) => {
               <label style={labelStyle}>Payment Mode</label>
               <select name="paymentMode" value={formData.paymentMode} onChange={handleChange} style={inputStyle}>
                 <option value="CASH">Cash</option>
+                <option value="CHEQUE">Cheque</option>
                 <option value="UPI">UPI / QR Code</option>
                 <option value="NET_BANKING">Net Banking</option>
                 <option value="CARD">Credit / Debit Card</option>

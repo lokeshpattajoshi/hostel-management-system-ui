@@ -94,9 +94,11 @@ const CreateExpense = ({ onCancel }) => {
           <label style={labelStyle}>Payment Method Channel:
             <select style={input} value={formData.paymentMode} onChange={e => setFormData({...formData, paymentMode: e.target.value})}>
               <option value="CASH">Cash</option>
+              <option value="CHEQUE">Cheque</option>
               <option value="UPI">UPI / QR Code</option>
               <option value="NET_BANKING">Net Banking</option>
               <option value="CARD">Credit / Debit Card</option>
+<option value="CARD">Credit / Debit Card</option>
             </select>
           </label>
         </div>

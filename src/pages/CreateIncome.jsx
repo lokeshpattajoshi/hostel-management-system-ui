@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { fetchHostelsApi, fetchTenantsApi, fetchWithAuth, createIncomeApi } from "../services/api";
+import { fetchHostelsApi, fetchTenantsApi, fetchWithAuth, createIncomeApi, fetchAdminUsersApi } from "../services/api";
 
 const CreateIncome = ({ onSave, onCancel }) => {
   const [hostels, setHostels] = useState([]);
   const [allTenants, setAllTenants] = useState([]); 
+  const [admins, setAdmins] = useState([]); // Store authorizing admin users
   
   // Cascade filters
   const [selectedHostel, setSelectedHostel] = useState("");
@@ -27,15 +28,23 @@ const CreateIncome = ({ onSave, onCancel }) => {
     description: "",
     transactionId: "",
     advanceAmount: 0,
-    createdBy: 3 
+    createdBy: 3,
+    receivedByUserId: "" // Mapped to API receivedByUserId
   });
 
   useEffect(() => {
-    const initHostels = async () => {
-      const data = await fetchHostelsApi();
-      setHostels(data || []);
+    const initFormReferences = async () => {
+      try {
+        const hostelData = await fetchHostelsApi();
+        const adminData = await fetchAdminUsersApi(); // Matches structural approach of CreateExpense
+        
+        setHostels(hostelData || []);
+        setAdmins(adminData || []);
+      } catch (err) {
+        console.error("Initialization error matching reference objects:", err);
+      }
     };
-    initHostels();
+    initFormReferences();
   }, []);
 
   // 1. Hostel Select
@@ -108,7 +117,6 @@ const CreateIncome = ({ onSave, onCancel }) => {
     try {
       setLoadingData(true);
       
-      // UPDATED TO NEW TARGET ENDPOINT: Matches incoming controller context
       const url = `/income/pending-summary?hostelId=${selectedHostel}&tenantId=${targetTenant.tenantId || targetTenant.id}&_t=${Date.now()}`;
       const response = await fetchWithAuth(url);
       
@@ -122,7 +130,6 @@ const CreateIncome = ({ onSave, onCancel }) => {
         const primaryBill = rawCharges[0];
         console.log("Targeting Primary Summary Object:", primaryBill);
 
-        // Map keys directly to your response payload structure
         const parsedTotal = parseFloat(primaryBill.totalAmount ?? 0);
         const parsedPaid = parseFloat(primaryBill.paidAmount ?? 0);
         const parsedBalance = parseFloat(primaryBill.balanceAmount ?? 0);
@@ -144,7 +151,7 @@ const CreateIncome = ({ onSave, onCancel }) => {
           ...prev,
           tenantId: primaryBill.tenantId || targetTenant.tenantId || targetTenant.id,
           chargeId: parsedChargeId,
-          amount: parsedBalance // Automatically maps outstanding remainder to input field
+          amount: parsedBalance 
         }));
       } else {
         console.log("No summary ledger arrays found. Resetting defaults.");
@@ -199,7 +206,8 @@ const CreateIncome = ({ onSave, onCancel }) => {
         description: formData.description,
         transactionId: formData.transactionId,
         advanceAmount: parseFloat(formData.advanceAmount) || 0,
-        createdBy: formData.createdBy
+        createdBy: formData.createdBy,
+        receivedByUserId: formData.receivedByUserId ? parseInt(formData.receivedByUserId) : null // Maps correctly downstream
       };
 
       const res = await createIncomeApi(payload);
@@ -341,8 +349,28 @@ const CreateIncome = ({ onSave, onCancel }) => {
           <select name="paymentMode" value={formData.paymentMode} onChange={handleChange} style={inputStyle}>
             <option value="UPI">UPI</option>
             <option value="CASH">Cash</option>
+            <option value="CHEQUE">Cheque</option>
             <option value="NET_BANKING">Net Banking</option>
             <option value="DEBIT_CARD">Debit Card</option>
+          </select>
+        </div>
+
+        {/* MATCHED: "Disbursed Paid By Personnel (Admin)" Look & Backend reference */}
+        <div style={fieldGroup}>
+          <label style={labelStyle}>Received By Personnel (Admin)</label>
+          <select 
+            name="receivedByUserId" 
+            value={formData.receivedByUserId} 
+            onChange={handleChange} 
+            required
+            style={inputStyle}
+          >
+            <option value="">Select Receiving Admin Agent</option>
+            {admins.map(a => (
+              <option key={a.userId} value={a.userId}>
+                {a.fullName}
+              </option>
+            ))}
           </select>
         </div>
 

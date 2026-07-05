@@ -38,8 +38,12 @@ function LoginPage() {
       if (data && data.error) {
         setError(data.error);
       } else if (data && data.token) {
-        // ✅ Success! Save the token and redirect to home
+        // ✅ Success! Save the token along with profile metadata to match the new dashboard state requirements
         localStorage.setItem("token", data.token);
+        localStorage.setItem("role", data.role || "USER");
+        localStorage.setItem("fullName", data.fullName || "Guest User");
+        localStorage.setItem("userId", data.userId || "");
+        
         navigate("/home");
       } else {
         setError("Invalid login response from server");

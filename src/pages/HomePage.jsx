@@ -19,8 +19,11 @@ function HomePage() {
   const [expenseSubView, setExpenseSubView] = useState("VIEW"); 
   const [incomeSubView, setIncomeSubView] = useState("VIEW");
   
+  // States to keep track of logged in user's profile metadata
+  const [userRole, setUserRole] = useState("");
+  const [userFullName, setUserFullName] = useState("");
+
   const navigate = useNavigate();
-  const modules = ["Users", "Hostels", "Rooms", "Beds", "Tenants", "Expenses", "Incomes", "Reports"];
 
   const executeSessionTermination = () => {
     localStorage.clear();
@@ -31,7 +34,15 @@ function HomePage() {
     const token = localStorage.getItem("token");
     if (!token) {
       executeSessionTermination();
+      return;
     }
+
+    // 💡 Read the auth metadata saved on login success
+    const storedRole = localStorage.getItem("role");
+    const storedFullName = localStorage.getItem("fullName");
+
+    setUserRole(storedRole || "USER");
+    setUserFullName(storedFullName || "Guest User");
 
     const handleGlobalAuthFailure = (event) => {
       if (event.detail && event.detail.status === 401) {
@@ -45,6 +56,12 @@ function HomePage() {
       window.removeEventListener("api-auth-failure", handleGlobalAuthFailure);
     };
   }, [navigate]);
+
+  // 💡 Filter modules based on user authorization level
+  const baseModules = ["Users", "Hostels", "Rooms", "Beds", "Tenants", "Expenses", "Incomes", "Reports"];
+  const allowedModules = userRole === "ADMIN" 
+    ? baseModules 
+    : ["Hostels", "Rooms", "Beds", "Tenants"];
 
   const handleLogout = () => {
     if (window.confirm("Are you sure you want to logout?")) {
@@ -112,7 +129,7 @@ function HomePage() {
       <>
         <h2 style={{ textAlign: "center", marginBottom: "20px" }}>Dashboard</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "20px" }}>
-          {modules.map((item) => (
+          {allowedModules.map((item) => (
             <div
               key={item}
               style={{
@@ -206,7 +223,15 @@ function HomePage() {
           <h2 style={{ margin: 0, fontSize: "20px", fontWeight: "600" }}>Hostel Management</h2>
         </div>
         
-        <button onClick={handleLogout} style={logoutBtnStyle}>Logout</button>
+        {/* 💡 Top-right greeting container layout */}
+        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+          {userFullName && (
+            <span style={{ fontSize: "14px", fontWeight: "500", opacity: "0.95" }}>
+              👋 Welcome, <strong>{userFullName}</strong>
+            </span>
+          )}
+          <button onClick={handleLogout} style={logoutBtnStyle}>Logout</button>
+        </div>
       </nav>
 
       <div style={{ padding: "30px" }}>
