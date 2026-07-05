@@ -1,67 +1,95 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 function LandingPage() {
   const navigate = useNavigate();
 
+  // ✅ Pure JS SEO Optimization: Dynamic Head Update
+  useEffect(() => {
+    // 1. Set the page title
+    document.title = "Smart Living Hostels | Premium Student PG & Hostel Management in Odisha";
+
+    // 2. Add or update the meta description
+    let metaDescription = document.querySelector('meta[name="description"]');
+    if (!metaDescription) {
+      metaDescription = document.createElement("meta");
+      metaDescription.setAttribute("name", "description");
+      document.head.appendChild(metaDescription);
+    }
+    metaDescription.setAttribute(
+      "content",
+      "Looking for premium student hostels or managed PG accommodations? Smart Living Hostels offers comfortable AC and Non-AC rooms with good food and high security in Odisha."
+    );
+
+    // 3. Add or update the canonical link
+    let canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (!canonicalLink) {
+      canonicalLink = document.createElement("link");
+      canonicalLink.setAttribute("rel", "canonical");
+      document.head.appendChild(canonicalLink);
+    }
+    canonicalLink.setAttribute("href", window.location.href);
+  }, []);
+
   return (
     <div style={pageStyle}>
-      {/* Top Banner Navigation */}
+      {/* Top Banner Navigation using Semantic HTML Elements */}
       <nav style={navStyle}>
         <div style={logoGroupStyle}>
           <div style={logoPlaceholderStyle}>🏢</div>
-          <h2 style={brandNameStyle}>Smart Living Hostels</h2>
+          {/* Main H1 is important for search bots to index your brand name */}
+          <h1 style={brandNameStyle}>Smart Living Hostels</h1>
         </div>
         <button onClick={() => navigate("/login")} style={loginNavBtnStyle}>
           Portal Login
         </button>
       </nav>
 
-      {/* Hero Section */}
+      {/* Hero Header Section */}
       <header style={heroSectionStyle}>
         <div style={heroContentStyle}>
-          <h1 style={mainTitleStyle}>End-to-End Hostel Management Solutions</h1>
+          <h2 style={mainTitleStyle}>End-to-End Hostel Management Solutions</h2>
           <p style={taglineStyle}>
             We take care of your living experience from top to bottom. Whether you are looking for managed Student Hostels or professional Paying Guest (PG) accommodations, we have the perfect place for you.
           </p>
         </div>
       </header>
 
-      {/* Offerings Grid Section */}
+      {/* Offerings Grid Section - Structured as a Section with standalone Articles */}
       <section style={featuresSectionStyle}>
         <h2 style={sectionHeadingStyle}>What We Offer</h2>
         <div style={gridStyle}>
-          <div style={featureCardStyle}>
+          <article style={featureCardStyle}>
             <div style={iconStyle}>🛏️</div>
             <h3>AC & Non-AC Rooms</h3>
             <p>Flexible living setups tailored to your budget preferences. Fully furnished, well-ventilated spaces.</p>
-          </div>
+          </article>
 
-          <div style={featureCardStyle}>
+          <article style={featureCardStyle}>
             <div style={iconStyle}>🍲</div>
             <h3>Good Food</h3>
             <p>Hygienic, freshly prepared, and nutritious home-style meals served daily right at the facility.</p>
-          </div>
+          </article>
 
-          <div style={featureCardStyle}>
+          <article style={featureCardStyle}>
             <div style={iconStyle}>🔒</div>
             <h3>Premium Security</h3>
             <p>Your safety is our priority. Around-the-clock security monitoring, secure access control keys, and wardens.</p>
-          </div>
+          </article>
         </div>
       </section>
 
-      {/* Contact Section */}
+      {/* Footer Section with explicit contact markup */}
       <footer style={contactSectionStyle}>
         <h2 style={{ marginBottom: "10px", fontSize: "22px" }}>Have Questions? Reach Out To Us Today!</h2>
         <p style={{ opacity: 0.9, marginBottom: "20px" }}>Our administration office is available to assist you with room allocation maps and rental details.</p>
         
         <div style={contactDetailsRowStyle}>
           <span style={contactItemStyle}>
-            📧 <strong>Email ID:</strong> <a href="mailto:lokeshpattajoshi@gmail.com" style={linkStyle}>lokeshpattajoshi@gmail.com</a>
+            Links: 📧 <strong>Email ID:</strong> <a href="mailto:smartassociates.odisha@gmail.com" style={linkStyle}>smartassociates.odisha@gmail.com</a>
           </span>
           <span style={contactItemStyle}>
-            📱 <strong>Mobile Number:</strong> <a href="tel:9966841208" style={linkStyle}>9966841208</a>
+            📱 <strong>Mobile Numbers:</strong> <a href="tel:9090909515" style={linkStyle}>9090909515</a> / <a href="tel:9658011150" style={linkStyle}>9658011150</a>
           </span>
         </div>
         
@@ -102,7 +130,7 @@ const logoPlaceholderStyle = {
 
 const brandNameStyle = {
   margin: 0,
-  fontSize: "18px",
+  fontSize: "20px",
   fontWeight: "700",
   color: "#007bff",
 };
@@ -143,18 +171,6 @@ const taglineStyle = {
   lineHeight: "1.6",
   opacity: "0.9",
   marginBottom: "30px",
-};
-
-const ctaButtonStyle = {
-  background: "#fff",
-  color: "#007bff",
-  border: "none",
-  padding: "14px 35px",
-  borderRadius: "30px",
-  fontSize: "16px",
-  fontWeight: "700",
-  cursor: "pointer",
-  boxShadow: "0 4px 15px rgba(0,0,0,0.15)",
 };
 
 const featuresSectionStyle = {
