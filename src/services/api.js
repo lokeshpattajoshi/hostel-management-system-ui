@@ -170,3 +170,73 @@ export const fetchExpenseReportDetailsApi = async (hostelId, startDate, endDate)
     return [];
   }
 };
+
+// --- APPROVALS QUEUE SYSTEM ---
+export const createApprovalRequestApi = (data) => 
+  fetchWithAuth("/approvals", { method: "POST", body: JSON.stringify(data) });
+
+/**
+ * Fetch all pending administrative approvals ledger entries.
+ * GET /api/approval/pending
+ */
+export const fetchPendingApprovalsApi = async () => {
+  try {
+    const url = `/approval/pending`;
+    return await fetchWithAuth(url);
+  } catch (error) {
+    console.error("Error fetching pending approvals ledger:", error);
+    return [];
+  }
+};
+
+/**
+ * Authorize a pending system changes event record.
+ * POST /api/approval/{id}/approve?approvedBy={adminId}
+ */
+export const approveRequestApi = async (id, adminId, remarks) => {
+  try {
+    const url = `/approval/${id}/approve?approvedBy=${encodeURIComponent(adminId)}`;
+    return await fetchWithAuth(url, { method: 'POST' });
+  } catch (error) {
+    console.error(`Error processing approval for record ID #${id}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Decline and turn back an authorization request.
+ * POST /api/approval/{id}/reject?approvedBy={adminId}&reason={remarks}
+ */
+export const rejectRequestApi = async (id, adminId, remarks) => {
+  try {
+    const url = `/approval/${id}/reject?approvedBy=${encodeURIComponent(adminId)}&reason=${encodeURIComponent(remarks)}`;
+    return await fetchWithAuth(url, { method: 'POST' });
+  } catch (error) {
+    console.error(`Error processing rejection on record ID #${id}:`, error);
+    return null;
+  }
+};
+
+export const fetchMyPendingApprovalsApi = async (
+    page = 0,
+    size = 10
+) => {
+
+    const token = localStorage.getItem("token");
+
+    const response = await fetch(
+        `${API_BASE_URL}/approval/pending?page=${page}&size=${size}`,
+        {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+            }
+        }
+    );
+
+    if (!response.ok) {
+        return null;
+    }
+
+    return await response.json();
+};

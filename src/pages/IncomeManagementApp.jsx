@@ -3,7 +3,8 @@ import ViewIncome from "./ViewIncome";
 import CreateIncome from "./CreateIncome";
 import ModifyIncome from "./ModifyIncome";
 
-const IncomeManagementApp = ({ initialView }) => {
+// ✅ Added userRole to the component props extraction
+const IncomeManagementApp = ({ initialView, userRole }) => {
   const [currentView, setCurrentView] = useState("VIEW");
   const [selectedRecord, setSelectedRecord] = useState(null);
 
@@ -34,6 +35,7 @@ const IncomeManagementApp = ({ initialView }) => {
         <ViewIncome 
           onModifyTrigger={handleEditTrigger} 
           onCreateTrigger={handleCreateTrigger} 
+          userRole={userRole} // ✅ Forwarded userRole down to manage delete actions dynamically
         />
       )}
 

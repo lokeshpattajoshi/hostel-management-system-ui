@@ -8,44 +8,48 @@ import {
 } from "../services/api";
 
 const CreateTenant = ({ onCancel }) => {
-  const [formData, setFormData] = useState({
-    fullName: "",
-    age: "",
-    gender: "MALE",
-    address: "",
-    identityType: "AADHAR",
-    identityNumber: "",
-    phoneNumber: "",
-    email: "",
-    guardianName: "",
-    guardianIdentityType: "AADHAR",
-    guardianIdentityNumber: "",
-    guardianPhone: "",
-    bedId: "",
-    checkInDate: new Date().toISOString().split('T')[0],
-    onboardedBy: "", 
-    isActive: true,
-    billingCycle: "MONTHLY",
-    
-    // ✅ New Financial & Charge Schema Fields
-    rent: "",
-    rentPaid: "",
-    securityAmount: "",
-    securityPaid: "",
-    admissionCharge: "",
-    admissionPaid: "",
-    
-    paymentMode: "CASH",
-    transactionId: "",
-    paymentDate: new Date().toISOString().split('T')[0], // Default to today
-    receivedBy: "",                                      // ID maps here from selection
-    dueDate: "",
-    remarks: "",
+  // ✅ Directly initialize form fields using the logged-in user session from localStorage
+  const [formData, setFormData] = useState(() => {
+    const loggedInUid = localStorage.getItem("userId") || "";
+    return {
+      fullName: "",
+      age: "",
+      gender: "MALE",
+      address: "",
+      identityType: "AADHAR",
+      identityNumber: "",
+      phoneNumber: "",
+      email: "",
+      guardianName: "",
+      guardianIdentityType: "AADHAR",
+      guardianIdentityNumber: "",
+      guardianPhone: "",
+      bedId: "",
+      checkInDate: new Date().toISOString().split('T')[0],
+      onboardedBy: loggedInUid, 
+      isActive: true,
+      billingCycle: "MONTHLY",
+      
+      // Financial & Charge Schema Fields
+      rent: "",
+      rentPaid: "",
+      securityAmount: "",
+      securityPaid: "",
+      admissionCharge: "",
+      admissionPaid: "",
+      
+      paymentMode: "CASH",
+      transactionId: "",
+      paymentDate: new Date().toISOString().split('T')[0],
+      receivedBy: loggedInUid,                                     
+      dueDate: "",
+      remarks: "",
 
-    /* Legacy fields maintained for backward compatibility */
-    chargeType: "RENT",
-    totalAmount: "",
-    paidAmount: ""
+      /* Legacy fields maintained for backward compatibility */
+      chargeType: "RENT",
+      totalAmount: "",
+      paidAmount: ""
+    };
   });
 
   const [hostels, setHostels] = useState([]);
@@ -66,12 +70,20 @@ const CreateTenant = ({ onCancel }) => {
         const usersList = uData || [];
         setSystemUsers(usersList);
 
-        if (usersList.length > 0) {
-          const firstUserId = usersList[0].id || usersList[0].userId;
+        // Fallback default resolution if localStorage was empty during component initialization
+        const sessionUid = localStorage.getItem("userId");
+        let fallbackUid = "";
+        if (sessionUid) {
+          fallbackUid = String(sessionUid);
+        } else if (usersList.length > 0) {
+          fallbackUid = String(usersList[0].id || usersList[0].userId);
+        }
+
+        if (fallbackUid) {
           setFormData(prev => ({ 
             ...prev, 
-            onboardedBy: String(firstUserId),
-            receivedBy: String(firstUserId) // Default collector to the first user
+            onboardedBy: prev.onboardedBy || fallbackUid,
+            receivedBy: prev.receivedBy || fallbackUid 
           }));
         }
       } catch (err) {
@@ -88,6 +100,7 @@ const CreateTenant = ({ onCancel }) => {
     setRooms([]); 
     setSelectedRoom(""); 
     setBeds([]);
+    setFormData(prev => ({ ...prev, bedId: "" }));
 
     if (hId) {
       const rData = await fetchRoomsByHostelApi(hId);
@@ -112,25 +125,36 @@ const CreateTenant = ({ onCancel }) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorStatus("");
 
+    // 1. Numerical Parsing for Foreign Keys & Session Metrics
     const parsedOnboardedBy = parseInt(formData.onboardedBy, 10);
     const parsedReceivedBy = parseInt(formData.receivedBy, 10);
     
-    if (!formData.onboardedBy || isNaN(parsedOnboardedBy)) {
+    const sessionUid = localStorage.getItem("userId");
+    const parsedCreatedBy = sessionUid ? parseInt(sessionUid, 10) : parsedOnboardedBy;
+    
+    // 2. Explicit Structural Validation Checks
+    if (isNaN(parsedOnboardedBy)) {
       setErrorStatus("A valid Staff/User must be selected to process this onboarding.");
       return;
     }
 
-    // Prepare complete updated request payload matching the DTO mapping exactly
+    if (isNaN(parsedReceivedBy)) {
+      setErrorStatus("A valid Receiver must be selected in the Paid To field.");
+      return;
+    }
+
+    // 3. Assemble Completely Parsed Payload
     const payload = {
       ...formData,
       age: parseInt(formData.age, 10) || 0,
       bedId: parseInt(formData.bedId, 10),
       onboardedBy: parsedOnboardedBy,
-      receivedBy: isNaN(parsedReceivedBy) ? parsedOnboardedBy : parsedReceivedBy,
+      receivedBy: parsedReceivedBy, // Direct assignment maps strictly to Paid To select block
+      createdBy: isNaN(parsedCreatedBy) ? null : parsedCreatedBy,
       
       // Numerical Parsing for accounting fields
       rent: parseFloat(formData.rent) || 0,
@@ -140,13 +164,14 @@ const CreateTenant = ({ onCancel }) => {
       admissionCharge: parseFloat(formData.admissionCharge) || 0,
       admissionPaid: parseFloat(formData.admissionPaid) || 0,
 
-      // Fallback calculation maps for legacy endpoint protection fields
+      // Fallback calculation fields for legacy endpoint schemas
       totalAmount: (parseFloat(formData.rent) || 0) + (parseFloat(formData.securityAmount) || 0) + (parseFloat(formData.admissionCharge) || 0),
       paidAmount: (parseFloat(formData.rentPaid) || 0) + (parseFloat(formData.securityPaid) || 0) + (parseFloat(formData.admissionPaid) || 0),
       
       guardianAadhar: formData.guardianIdentityType === "AADHAR" ? formData.guardianIdentityNumber : null
     };
 
+    // 4. API Transmission Sequence
     try {
       const response = await createTenantApi(payload);
       if (response) {
@@ -175,36 +200,37 @@ const CreateTenant = ({ onCancel }) => {
         {/* SECTION 1: PERSONAL INFORMATION */}
         <section style={sectionStyle}>
           <h4>1. Personal Information</h4>
-          <input type="text" name="fullName" placeholder="Full Name" onChange={handleChange} required style={inputStyle} />
+          <input type="text" name="fullName" value={formData.fullName} placeholder="Full Name" onChange={handleChange} required style={inputStyle} />
           <div style={{ display: "flex", gap: "10px" }}>
-            <input type="number" name="age" placeholder="Age" onChange={handleChange} required style={inputStyle} />
-            <select name="gender" onChange={handleChange} style={inputStyle}>
+            <input type="number" name="age" value={formData.age} placeholder="Age" onChange={handleChange} required style={inputStyle} />
+            <select name="gender" value={formData.gender} onChange={handleChange} style={inputStyle}>
               <option value="MALE">Male</option>
               <option value="FEMALE">Female</option>
             </select>
           </div>
           <div style={{ display: "flex", gap: "5px" }}>
-            <select name="identityType" onChange={handleChange} style={{ flex: 1, ...inputStyle }}>
+            <select name="identityType" value={formData.identityType} onChange={handleChange} style={{ flex: 1, ...inputStyle }}>
               <option value="AADHAR">Aadhaar</option>
               <option value="PAN">PAN</option>
             </select>
-            <input type="text" name="identityNumber" placeholder="ID Number" onChange={handleChange} required style={{ flex: 2, ...inputStyle }} />
+            <input type="text" name="identityNumber" value={formData.identityNumber} placeholder="ID Number" onChange={handleChange} required style={{ flex: 2, ...inputStyle }} />
           </div>
-          <input type="text" name="phoneNumber" placeholder="Phone" onChange={handleChange} required style={inputStyle} />
-          <textarea name="address" placeholder="Address" onChange={handleChange} style={{ ...inputStyle, height: "50px" }} />
+          <input type="text" name="phoneNumber" value={formData.phoneNumber} placeholder="Phone" onChange={handleChange} required style={inputStyle} />
+          <input type="email" name="email" value={formData.email} placeholder="Email Address (Optional)" onChange={handleChange} style={inputStyle} />
+          <textarea name="address" value={formData.address} placeholder="Address" onChange={handleChange} style={{ ...inputStyle, height: "50px" }} />
         </section>
 
         {/* SECTION 2: GUARDIAN INFORMATION */}
         <section style={sectionStyle}>
           <h4>2. Guardian Information</h4>
-          <input type="text" name="guardianName" placeholder="Guardian Name" onChange={handleChange} required style={inputStyle} />
-          <input type="text" name="guardianPhone" placeholder="Guardian Phone" onChange={handleChange} required style={inputStyle} />
+          <input type="text" name="guardianName" value={formData.guardianName} placeholder="Guardian Name" onChange={handleChange} required style={inputStyle} />
+          <input type="text" name="guardianPhone" value={formData.guardianPhone} placeholder="Guardian Phone" onChange={handleChange} required style={inputStyle} />
           <div style={{ display: "flex", gap: "5px" }}>
-            <select name="guardianIdentityType" onChange={handleChange} style={{ flex: 1, ...inputStyle }}>
+            <select name="guardianIdentityType" value={formData.guardianIdentityType} onChange={handleChange} style={{ flex: 1, ...inputStyle }}>
               <option value="AADHAR">Aadhaar</option>
               <option value="OTHER">Other</option>
             </select>
-            <input type="text" name="guardianIdentityNumber" placeholder="ID Number" onChange={handleChange} style={{ flex: 2, ...inputStyle }} />
+            <input type="text" name="guardianIdentityNumber" value={formData.guardianIdentityNumber} placeholder="ID Number" onChange={handleChange} style={{ flex: 2, ...inputStyle }} />
           </div>
         </section>
 
@@ -258,6 +284,7 @@ const CreateTenant = ({ onCancel }) => {
             required 
             style={inputStyle}
           >
+            <option value="">-- Choose Processing Attendant --</option>
             {systemUsers.map(u => {
               const uId = u.id || u.userId;
               return <option key={uId} value={uId}>{u.fullName || u.username || `User #${uId}`}</option>;
@@ -269,7 +296,6 @@ const CreateTenant = ({ onCancel }) => {
         <section style={{ ...sectionStyle, backgroundColor: "#fff8e1" }}>
           <h4>4. Charges & Financials</h4>
           
-          {/* Monthly Rent Setup */}
           <div style={{ display: "flex", gap: "10px" }}>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>Rent Per Month *</label>
@@ -281,7 +307,6 @@ const CreateTenant = ({ onCancel }) => {
             </div>
           </div>
 
-          {/* Security Deposit Settings */}
           <div style={{ display: "flex", gap: "10px" }}>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>Security Amount</label>
@@ -293,7 +318,6 @@ const CreateTenant = ({ onCancel }) => {
             </div>
           </div>
 
-          {/* Admission Charges */}
           <div style={{ display: "flex", gap: "10px" }}>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>Admission Charges</label>
@@ -305,7 +329,6 @@ const CreateTenant = ({ onCancel }) => {
             </div>
           </div>
 
-          {/* Payment Parameters */}
           <div style={{ display: "flex", gap: "10px" }}>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>Payment Mode</label>
@@ -323,7 +346,6 @@ const CreateTenant = ({ onCancel }) => {
             </div>
           </div>
 
-          {/* Paid To / Collected By Dropdown mapping to receivedBy */}
           <label style={labelStyle}>Paid To (Collected By)</label>
           <select 
             name="receivedBy" 
@@ -332,6 +354,7 @@ const CreateTenant = ({ onCancel }) => {
             required 
             style={inputStyle}
           >
+            <option value="">-- Choose Receiver --</option>
             {systemUsers.map(u => {
               const uId = u.id || u.userId;
               return <option key={uId} value={uId}>{u.fullName || u.username || `User #${uId}`}</option>;
@@ -348,7 +371,7 @@ const CreateTenant = ({ onCancel }) => {
           />
 
           <label style={labelStyle}>Next Rent Due Date</label>
-          <input type="date" name="dueDate" onChange={handleChange} required style={inputStyle} />
+          <input type="date" name="dueDate" value={formData.dueDate} onChange={handleChange} required style={inputStyle} />
           
           <input type="text" name="remarks" placeholder="Remarks" value={formData.remarks} onChange={handleChange} style={inputStyle} />
         </section>
@@ -362,10 +385,10 @@ const CreateTenant = ({ onCancel }) => {
   );
 };
 
-const containerStyle = { background: "#fff", padding: "20px", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" };
+const containerStyle = { background: "#fff", padding: "20px", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", color: "#333" };
 const formGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" };
 const sectionStyle = { padding: "15px", border: "1px solid #eee", borderRadius: "6px" };
-const inputStyle = { width: "100%", padding: "10px", margin: "5px 0", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" };
+const inputStyle = { width: "100%", padding: "10px", margin: "5px 0", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box", background: "#fff", color: "#333" };
 const labelStyle = { fontSize: "11px", color: "#666", display: "block", marginTop: "6px" };
 const submitBtn = { padding: "12px 25px", background: "#28a745", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" };
 const cancelBtn = { padding: "12px 25px", background: "#6c757d", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" };

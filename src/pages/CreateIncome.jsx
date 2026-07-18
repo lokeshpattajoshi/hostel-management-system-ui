@@ -19,6 +19,9 @@ const CreateIncome = ({ onSave, onCancel }) => {
   // Financial profile tracking
   const [activeCharge, setActiveCharge] = useState(null);
   
+  // Dynamically read the logged-in administrator's user ID from localStorage
+  const currentUserId = parseInt(localStorage.getItem("userId")) || 1;
+
   const [formData, setFormData] = useState({
     tenantId: "",
     chargeId: "", 
@@ -28,7 +31,7 @@ const CreateIncome = ({ onSave, onCancel }) => {
     description: "",
     transactionId: "",
     advanceAmount: 0,
-    createdBy: 3,
+    createdBy: currentUserId, // Dynamic ID instead of hardcoded 3
     receivedByUserId: "" // Mapped to API receivedByUserId
   });
 
@@ -355,7 +358,7 @@ const CreateIncome = ({ onSave, onCancel }) => {
           </select>
         </div>
 
-        {/* MATCHED: "Disbursed Paid By Personnel (Admin)" Look & Backend reference */}
+        {/* Received By Personnel dropdown */}
         <div style={fieldGroup}>
           <label style={labelStyle}>Received By Personnel (Admin)</label>
           <select 

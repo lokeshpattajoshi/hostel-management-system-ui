@@ -8,6 +8,7 @@ import TenantManagementApp from "./TenantManagementApp";
 import ExpenseManagementApp from "./ExpenseManagementApp"; 
 import IncomeManagementApp from "./IncomeManagementApp"; 
 import ReportManagement from "./ReportManagement";
+import ApprovalQueueManagementApp from "./ApprovalQueueManagementApp"; // 1. Import the approvals app wrapper
 
 function HomePage() {
   const [activeModule, setActiveModule] = useState("DASHBOARD");
@@ -37,7 +38,7 @@ function HomePage() {
       return;
     }
 
-    // 💡 Read the auth metadata saved on login success
+    // Read the auth metadata saved on login success
     const storedRole = localStorage.getItem("role");
     const storedFullName = localStorage.getItem("fullName");
 
@@ -57,11 +58,11 @@ function HomePage() {
     };
   }, [navigate]);
 
-  // 💡 Filter modules based on user authorization level
-  const baseModules = ["Users", "Hostels", "Rooms", "Beds", "Tenants", "Expenses", "Incomes", "Reports"];
-  const allowedModules = userRole === "ADMIN" 
+  // 2. Added "Approvals" to the list of base administrative structures
+  const baseModules = ["Users", "Hostels", "Rooms", "Beds", "Tenants", "Expenses", "Incomes", "Reports", "Approvals"];
+  const allowedModules = userRole === "ADMIN" || userRole === "SUPER_ADMIN"
     ? baseModules 
-    : ["Hostels", "Rooms", "Beds", "Tenants"];
+    : ["Hostels", "Rooms", "Beds", "Tenants", "Incomes"]; // Regular users only access execution tables
 
   const handleLogout = () => {
     if (window.confirm("Are you sure you want to logout?")) {
@@ -104,7 +105,16 @@ function HomePage() {
     if (activeModule === "Hostels") return <div>{backButton}<HostelManagementApp initialView={hostelSubView} /></div>;
     if (activeModule === "Rooms") return <div>{backButton}<RoomManagementApp initialView={roomSubView} /></div>;
     if (activeModule === "Beds") return <div>{backButton}<BedManagementApp initialView={bedSubView} /></div>;
-    if (activeModule === "Tenants") return <div>{backButton}<TenantManagementApp initialView={tenantSubView} /></div>;
+    
+    if (activeModule === "Tenants") {
+      return (
+        <div>
+          {backButton}
+          <TenantManagementApp initialView={tenantSubView} userRole={userRole} />
+        </div>
+      );
+    }
+    
     if (activeModule === "Expenses") return <div>{backButton}<ExpenseManagementApp initialView={expenseSubView} /></div>;
     
     if (activeModule === "Incomes") {
@@ -121,6 +131,16 @@ function HomePage() {
         <div>
           {backButton}
           <ReportManagement />
+        </div>
+      );
+    }
+
+    // 3. Conditional route catch to surface the Queue workspace layout
+    if (activeModule === "Approvals") {
+      return (
+        <div>
+          {backButton}
+          <ApprovalQueueManagementApp />
         </div>
       );
     }
@@ -158,6 +178,16 @@ function HomePage() {
                       style={{ ...btnStyle, background: "#f8f9fa" }}
                     >
                       Open Executive Summary
+                    </button>
+                  </>
+                ) : item === "Approvals" ? (
+                  <>
+                    {/* Unique button rendering map layout for authorizations pane */}
+                    <button
+                      onClick={() => handleModuleNavigation(item, "VIEW")}
+                      style={{ ...btnStyle, background: "#e6fffa", color: "#234e52", borderColor: "#81e6d9", fontWeight: "bold" }}
+                    >
+                      🛡️ Open Approval Queue
                     </button>
                   </>
                 ) : (
@@ -223,7 +253,6 @@ function HomePage() {
           <h2 style={{ margin: 0, fontSize: "20px", fontWeight: "600" }}>Hostel Management</h2>
         </div>
         
-        {/* 💡 Top-right greeting container layout */}
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           {userFullName && (
             <span style={{ fontSize: "14px", fontWeight: "500", opacity: "0.95" }}>

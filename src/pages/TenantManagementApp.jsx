@@ -3,7 +3,8 @@ import ViewTenants from "./ViewTenants";
 import CreateTenant from "./CreateTenant";
 import ModifyTenant from "./ModifyTenant";
 
-const TenantManagementApp = ({ initialView }) => {
+// ✅ Added userRole to the component props extraction
+const TenantManagementApp = ({ initialView, userRole }) => {
   const [view, setView] = useState(initialView || "VIEW");
   const [selectedTenant, setSelectedTenant] = useState(null);
 
@@ -23,9 +24,22 @@ const TenantManagementApp = ({ initialView }) => {
     setView("VIEW");
   };
 
+  // ✅ Added a placeholder handler for your Income navigation actions
+  const handleViewIncome = (tenant) => {
+    console.log("Navigating to income summary interface metrics for:", tenant);
+    // Add logic here if you want to swap modules or open a custom ledger layout view modal
+  };
+
   return (
     <div style={{ padding: "10px" }}>
-      {view === "VIEW" && <ViewTenants onEdit={handleEdit} />}
+      {/* ✅ Forwarding userRole and passing down the view income handler to ViewTenants */}
+      {view === "VIEW" && (
+        <ViewTenants 
+          onEdit={handleEdit} 
+          onViewIncome={handleViewIncome}
+          userRole={userRole} 
+        />
+      )}
       {view === "CREATE" && <CreateTenant onCancel={handleBack} />}
       {view === "MODIFY" && <ModifyTenant tenant={selectedTenant} onBack={handleBack} />}
     </div>

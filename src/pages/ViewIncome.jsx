@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { fetchHostelsApi, fetchTenantsApi, searchIncomeApi, deleteIncomeApi } from "../services/api";
 
-const ViewIncome = ({ onModifyTrigger, onCreateTrigger }) => {
+// ✅ Extracted userRole from props
+const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
   const [hostels, setHostels] = useState([]);
   const [allTenants, setAllTenants] = useState([]); // Master bucket for selected hostel
   const [filteredTenants, setFilteredTenants] = useState([]); // Room-specific filtered view bucket
@@ -12,6 +13,9 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger }) => {
   const [rooms, setRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState("");
   const [selectedTenant, setSelectedTenant] = useState("");
+
+  // ✅ Computed admin check matching your dashboard formatting profile
+  const isAdmin = userRole?.toUpperCase() === "ADMIN";
 
   useEffect(() => {
     const loadHostelDropdowns = async () => {
@@ -102,6 +106,12 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger }) => {
   };
 
   const handleDelete = async (id) => {
+    // ✅ Functional API guard defense strategy
+    if (!isAdmin) {
+      alert("Unauthorized operational request denied.");
+      return;
+    }
+
     if (window.confirm("Are you sure you want to delete this ledger entry?")) {
       const success = await deleteIncomeApi(id);
       if (success !== null) {
@@ -192,7 +202,10 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger }) => {
                 <td style={tdStyle}>{inc.transactionId || "—"}</td>
                 <td style={tdStyle}>
                   <button onClick={() => onModifyTrigger(inc)} style={editBtnStyle}>Edit</button>
-                  <button onClick={() => handleDelete(inc.incomeId)} style={deleteBtnStyle}>Delete</button>
+                  {/* ✅ Wrap delete actions container block conditionally */}
+                  {isAdmin && (
+                    <button onClick={() => handleDelete(inc.incomeId)} style={deleteBtnStyle}>Delete</button>
+                  )}
                 </td>
               </tr>
             ))

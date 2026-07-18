@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react"; // Added useCallback
-import { fetchTenantsApi, fetchHostelsApi } from "../services/api";
+import React, { useState, useEffect, useCallback } from "react";
+import { fetchTenantsApi, fetchHostelsApi, deleteTenantApi } from "../services/api";
 
-const ViewTenants = ({ onEdit }) => {
+// ✅ Added userRole as a prop to manage structural authorization access
+const ViewTenants = ({ onEdit, onViewIncome, userRole = "staff" }) => {
   const [tenants, setTenants] = useState([]);
   const [hostels, setHostels] = useState([]);
   const [search, setSearch] = useState({ name: "", phone: "", hostelId: "" });
@@ -10,18 +11,21 @@ const ViewTenants = ({ onEdit }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
+  // Check if current authenticated user layout possesses admin tier permissions
+  const isAdmin = userRole?.toLowerCase() === "admin";
+
   // 1. Wrap loadTenants in useCallback so its reference stays stable
   const loadTenants = useCallback(async () => {
     const data = await fetchTenantsApi(search.name, search.phone, search.hostelId);
     setTenants(data || []);
     setCurrentPage(1); 
-  }, [search.name, search.phone, search.hostelId]); // Listens specifically to search fields changing
+  }, [search.name, search.phone, search.hostelId]); 
 
   // 2. Fetch master hostel options on mount
   useEffect(() => {
     fetchHostelsApi().then(setHostels);
     loadTenants();
-  }, [loadTenants]); // Safely added loadTenants as a dependency
+  }, [loadTenants]); 
 
   // 3. Handle debounced search triggers safely
   useEffect(() => {
@@ -29,7 +33,32 @@ const ViewTenants = ({ onEdit }) => {
       loadTenants();
     }, 500);
     return () => clearTimeout(delayDebounce);
-  }, [search, loadTenants]); // Safely added loadTenants as a dependency
+  }, [search, loadTenants]); 
+
+  // 4. Dynamic Handler for Deletion
+  const handleDelete = async (tenantId, tenantName) => {
+    // Second fallback defensive guard checking authorization profile metrics
+    if (!isAdmin) {
+      alert("Unauthorized operational request denied.");
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to delete tenant "${tenantName}"?`)) {
+      try {
+        const response = await deleteTenantApi(tenantId);
+        
+        if (response && (response.error || response.status === 500)) {
+          alert(`Deletion failed: ${response.message || "Internal server constraint encountered."}`);
+        } else {
+          alert("Tenant record deleted successfully.");
+          setTenants((prevTenants) => prevTenants.filter((t) => t.tenantId !== tenantId));
+        }
+      } catch (err) {
+        console.error("Failed to delete tenant:", err);
+        alert("An unexpected network fault occurred while attempting deletion.");
+      }
+    }
+  };
 
   // Pagination Logic Calculations
   const totalItems = tenants.length;
@@ -45,7 +74,6 @@ const ViewTenants = ({ onEdit }) => {
     }
   };
 
-  // Generate dynamic array window of page numbers to show (Max 10)
   const maxButtonsToShow = 10;
   let startPage = Math.max(1, currentPage - Math.floor(maxButtonsToShow / 2));
   let endPage = startPage + maxButtonsToShow - 1;
@@ -126,7 +154,17 @@ const ViewTenants = ({ onEdit }) => {
                     </span>
                   </td>
                   <td style={td}>
-                    <button onClick={() => onEdit(t)} style={editBtn}>Edit</button>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      <button onClick={() => onEdit(t)} style={editBtn}>Edit</button>
+                      
+                      {/* ✅ Income Link rendered unconditionally for all authentication layers */}
+                      <button onClick={() => onViewIncome(t)} style={incomeBtn}>Income</button>
+                      
+                      {/* ✅ Delete Button restricted explicitly to active Admin status levels */}
+                      {isAdmin && (
+                        <button onClick={() => handleDelete(t.tenantId, t.fullName)} style={deleteBtn}>Delete</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -195,7 +233,7 @@ const ViewTenants = ({ onEdit }) => {
   );
 };
 
-// Existing UI Styling Sheets
+// Style Configurations
 const searchBarStyle = { display: "flex", gap: "10px", marginBottom: "20px" };
 const searchInput = { flex: 1, padding: "8px", borderRadius: "4px", border: "1px solid #ccc" };
 const tableContainer = { background: "#fff", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", overflow: "hidden" };
@@ -205,6 +243,11 @@ const td = { padding: "12px", verticalAlign: "top", fontSize: "14px" };
 const tableRow = { borderBottom: "1px solid #eee" };
 const addressMini = { fontSize: "11px", color: "#888", marginTop: "4px", maxWidth: "180px" };
 const editBtn = { padding: "5px 10px", background: "#ffc107", border: "none", borderRadius: "4px", cursor: "pointer" };
+
+// ✅ Added structural style sheets for the new actions layout properties
+const incomeBtn = { padding: "5px 10px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" };
+const deleteBtn = { padding: "5px 10px", background: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" };
+
 const statusActive = { color: "green", fontWeight: "bold" };
 const statusInactive = { color: "red", fontWeight: "bold" };
 
