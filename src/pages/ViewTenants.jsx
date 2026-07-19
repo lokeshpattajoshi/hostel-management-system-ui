@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { fetchTenantsApi, fetchHostelsApi, deleteTenantApi } from "../services/api";
 
 // ✅ Added userRole as a prop to manage structural authorization access
-const ViewTenants = ({ onEdit, onViewIncome, userRole = "staff" }) => {
+const ViewTenants = ({ onEdit, userRole = "staff" }) => {
   const [tenants, setTenants] = useState([]);
   const [hostels, setHostels] = useState([]);
   const [search, setSearch] = useState({ name: "", phone: "", hostelId: "" });
@@ -157,9 +157,6 @@ const ViewTenants = ({ onEdit, onViewIncome, userRole = "staff" }) => {
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                       <button onClick={() => onEdit(t)} style={editBtn}>Edit</button>
                       
-                      {/* ✅ Income Link rendered unconditionally for all authentication layers */}
-                      <button onClick={() => onViewIncome(t)} style={incomeBtn}>Income</button>
-                      
                       {/* ✅ Delete Button restricted explicitly to active Admin status levels */}
                       {isAdmin && (
                         <button onClick={() => handleDelete(t.tenantId, t.fullName)} style={deleteBtn}>Delete</button>
@@ -243,9 +240,6 @@ const td = { padding: "12px", verticalAlign: "top", fontSize: "14px" };
 const tableRow = { borderBottom: "1px solid #eee" };
 const addressMini = { fontSize: "11px", color: "#888", marginTop: "4px", maxWidth: "180px" };
 const editBtn = { padding: "5px 10px", background: "#ffc107", border: "none", borderRadius: "4px", cursor: "pointer" };
-
-// ✅ Added structural style sheets for the new actions layout properties
-const incomeBtn = { padding: "5px 10px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" };
 const deleteBtn = { padding: "5px 10px", background: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" };
 
 const statusActive = { color: "green", fontWeight: "bold" };

@@ -19,6 +19,7 @@ const ModifyTenant = ({ tenant, onBack, currentUserId }) => {
 
     const payload = {
       ...formData,
+      age: formData.age ? parseInt(formData.age, 10) : null,
       // ✅ Injected modifiedBy parameter directly into outbound DTO request schema
       modifiedBy: isNaN(parsedModifiedBy) ? null : parsedModifiedBy,
       
@@ -48,13 +49,49 @@ const ModifyTenant = ({ tenant, onBack, currentUserId }) => {
       </p>
 
       <form onSubmit={handleUpdate}>
-        {/* SECTION 1: CONTACT INFORMATION */}
+        
+        {/* SECTION 1: PERSONAL PROFILE */}
+        <h4 style={{marginTop: "20px"}}>Personal Profile</h4>
+        <div style={formGrid}>
+          <label>Full Name: 
+            <input 
+              style={input} 
+              value={formData.fullName || ""} 
+              onChange={e => setFormData({...formData, fullName: e.target.value})} 
+              required
+            />
+          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+            <label>Age: 
+              <input 
+                type="number" 
+                style={input} 
+                value={formData.age ?? ""} 
+                onChange={e => setFormData({...formData, age: e.target.value})} 
+              />
+            </label>
+            <label>Gender: 
+              <select 
+                style={input} 
+                value={formData.gender || ""} 
+                onChange={e => setFormData({...formData, gender: e.target.value})}
+              >
+                <option value="MALE">Male</option>
+                <option value="FEMALE">Female</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {/* SECTION 2: CONTACT INFORMATION */}
+        <h4 style={{marginTop: "20px"}}>Contact Details</h4>
         <div style={formGrid}>
           <label>Phone: <input style={input} value={formData.phoneNumber || ""} onChange={e => setFormData({...formData, phoneNumber: e.target.value})} /></label>
           <label>Email: <input style={input} value={formData.email || ""} onChange={e => setFormData({...formData, email: e.target.value})} /></label>
         </div>
 
-        {/* SECTION 2: IDENTITY VERIFICATION */}
+        {/* SECTION 3: IDENTITY VERIFICATION */}
         <h4 style={{marginTop: "20px"}}>Identity Details</h4>
         <div style={formGrid}>
           <label>Identity Type:
@@ -73,7 +110,7 @@ const ModifyTenant = ({ tenant, onBack, currentUserId }) => {
           <textarea style={textArea} value={formData.address || ""} onChange={e => setFormData({...formData, address: e.target.value})} />
         </div>
 
-        {/* SECTION 3: GUARDIAN UPDATE */}
+        {/* SECTION 4: GUARDIAN UPDATE */}
         <h4 style={{marginTop: "20px"}}>Guardian Update</h4>
         <div style={formGrid}>
           <label>Name: <input style={input} value={formData.guardianName || ""} onChange={e => setFormData({...formData, guardianName: e.target.value})} /></label>
@@ -92,19 +129,46 @@ const ModifyTenant = ({ tenant, onBack, currentUserId }) => {
           </label>
         </div>
 
-        {/* SECTION 4: STATUS UPDATE */}
-        <h4 style={{marginTop: "20px"}}>Operational Status</h4>
+        {/* SECTION 5: OPERATIONAL STATUS & REMARKS */}
+        <h4 style={{marginTop: "20px"}}>Operational Status & Chronology</h4>
         <div style={formGrid}>
-          <label>Status:
+          <label>Check-In Date: 
+            <input 
+              type="date" 
+              style={input} 
+              value={formData.checkInDate || ""} 
+              onChange={e => setFormData({...formData, checkInDate: e.target.value})} 
+            />
+          </label>
+          <label>Checkout Date: 
+            <input 
+              type="date" 
+              style={input} 
+              value={formData.checkOutDate || ""} 
+              onChange={e => setFormData({...formData, checkOutDate: e.target.value})} 
+            />
+          </label>
+        </div>
+
+        <div style={formGrid}>
+          <label>Active Tenant Status:
             <select style={input} value={formData.isActive} onChange={e => setFormData({...formData, isActive: e.target.value === "true"})}>
               <option value="true">Active</option>
               <option value="false">Exited</option>
             </select>
           </label>
-          <label>Checkout Date: <input type="date" style={input} value={formData.checkOutDate || ""} onChange={e => setFormData({...formData, checkOutDate: e.target.value})} /></label>
+          <label>Remarks: 
+            <input 
+              type="text" 
+              style={input} 
+              placeholder="Internal tracking footnotes..." 
+              value={formData.remarks || ""} 
+              onChange={e => setFormData({...formData, remarks: e.target.value})} 
+            />
+          </label>
         </div>
 
-        <div style={{marginTop: "20px", display: "flex", gap: "10px"}}>
+        <div style={{marginTop: "30px", display: "flex", gap: "10px"}}>
           <button type="submit" style={btnSubmit}>Update Record</button>
           <button type="button" onClick={onBack} style={btnCancel}>Go Back</button>
         </div>
