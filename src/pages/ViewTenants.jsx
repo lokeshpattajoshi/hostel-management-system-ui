@@ -1,33 +1,32 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { fetchTenantsApi, fetchHostelsApi, deleteTenantApi } from "../services/api";
 
-// ✅ Added userRole as a prop to manage structural authorization access
 const ViewTenants = ({ onEdit, userRole = "staff" }) => {
   const [tenants, setTenants] = useState([]);
   const [hostels, setHostels] = useState([]);
-  const [search, setSearch] = useState({ name: "", phone: "", hostelId: "" });
+  const [search, setSearch] = useState({ name: "", phone: "", hostelId: "", status: "ALL" });
 
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
-  // Check if current authenticated user layout possesses admin tier permissions
+  // Check user role for permissions
   const isAdmin = userRole?.toLowerCase() === "admin";
 
-  // 1. Wrap loadTenants in useCallback so its reference stays stable
+  // Load tenants data
   const loadTenants = useCallback(async () => {
     const data = await fetchTenantsApi(search.name, search.phone, search.hostelId);
     setTenants(data || []);
     setCurrentPage(1); 
   }, [search.name, search.phone, search.hostelId]); 
 
-  // 2. Fetch master hostel options on mount
+  // Fetch master hostels on mount
   useEffect(() => {
     fetchHostelsApi().then(setHostels);
     loadTenants();
   }, [loadTenants]); 
 
-  // 3. Handle debounced search triggers safely
+  // Debounced search trigger
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
       loadTenants();
@@ -35,38 +34,52 @@ const ViewTenants = ({ onEdit, userRole = "staff" }) => {
     return () => clearTimeout(delayDebounce);
   }, [search, loadTenants]); 
 
-  // 4. Dynamic Handler for Deletion
+  // Soft Delete Handler: Marks tenant as exited instead of removing from local UI array
   const handleDelete = async (tenantId, tenantName) => {
-    // Second fallback defensive guard checking authorization profile metrics
     if (!isAdmin) {
       alert("Unauthorized operational request denied.");
       return;
     }
 
-    if (window.confirm(`Are you sure you want to delete tenant "${tenantName}"?`)) {
+    if (window.confirm(`Are you sure you want to mark tenant "${tenantName}" as Exited?`)) {
       try {
         const response = await deleteTenantApi(tenantId);
         
         if (response && (response.error || response.status === 500)) {
-          alert(`Deletion failed: ${response.message || "Internal server constraint encountered."}`);
+          alert(`Operation failed: ${response.message || "Internal server constraint encountered."}`);
         } else {
-          alert("Tenant record deleted successfully.");
-          setTenants((prevTenants) => prevTenants.filter((t) => t.tenantId !== tenantId));
+          alert("Tenant record marked as Exited successfully.");
+          
+          // Soft update state so the record remains in the UI marked as Exited
+          setTenants((prevTenants) =>
+            prevTenants.map((t) =>
+              (t.tenantId === tenantId || t.id === tenantId)
+                ? { ...t, isActive: false }
+                : t
+            )
+          );
         }
       } catch (err) {
-        console.error("Failed to delete tenant:", err);
-        alert("An unexpected network fault occurred while attempting deletion.");
+        console.error("Failed to mark tenant as exited:", err);
+        alert("An unexpected network fault occurred while attempting operation.");
       }
     }
   };
 
+  // Filter tenants locally based on status filter
+  const filteredTenants = tenants.filter((t) => {
+    if (search.status === "ACTIVE") return t.isActive === true;
+    if (search.status === "EXITED") return t.isActive === false;
+    return true; // "ALL"
+  });
+
   // Pagination Logic Calculations
-  const totalItems = tenants.length;
+  const totalItems = filteredTenants.length;
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   const indexOfLastRecord = currentPage * pageSize;
   const indexOfFirstRecord = indexOfLastRecord - pageSize;
-  const currentPagedDataSlice = tenants.slice(indexOfFirstRecord, indexOfLastRecord);
+  const currentPagedDataSlice = filteredTenants.slice(indexOfFirstRecord, indexOfLastRecord);
 
   const handlePageChange = (targetPageNumber) => {
     if (targetPageNumber >= 1 && targetPageNumber <= totalPages) {
@@ -111,6 +124,15 @@ const ViewTenants = ({ onEdit, userRole = "staff" }) => {
           <option value="">All Hostels</option>
           {hostels.map(h => <option key={h.hostelId} value={h.hostelId}>{h.hostelName}</option>)}
         </select>
+        <select 
+          style={searchInput} 
+          value={search.status}
+          onChange={(e) => setSearch({ ...search, status: e.target.value })}
+        >
+          <option value="ALL">All Statuses</option>
+          <option value="ACTIVE">Active Only</option>
+          <option value="EXITED">Exited Only</option>
+        </select>
       </div>
 
       <div style={tableContainer}>
@@ -128,43 +150,57 @@ const ViewTenants = ({ onEdit, userRole = "staff" }) => {
             {currentPagedDataSlice.length === 0 ? (
               <tr>
                 <td colSpan="5" style={{ padding: "30px", textAlign: "center", color: "#888", fontStyle: "italic" }}>
-                  No tenant configurations match the specific criteria filter metrics.
+                  No tenant records match the selected filter criteria.
                 </td>
               </tr>
             ) : (
-              currentPagedDataSlice.map(t => (
-                <tr key={t.tenantId} style={tableRow}>
-                  <td style={td}>
-                    <strong>{t.fullName}</strong> ({t.gender})<br/>
-                    <small>{t.phoneNumber}</small><br/>
-                    <div style={addressMini}>{t.address}</div>
-                  </td>
-                  <td style={td}>
-                    {t.hostelName}<br/>
-                    <small>Room: {t.roomNumber} | Bed: {t.bedNumber}</small><br/>
-                    <small style={{color: "#666"}}>In: {t.checkInDate}</small>
-                  </td>
-                  <td style={td}>
-                    {t.guardianName}<br/>
-                    <small>Ph: {t.guardianPhone}</small>
-                  </td>
-                  <td style={td}>
-                    <span style={t.isActive ? statusActive : statusInactive}>
-                      {t.isActive ? "Active" : "Exited"}
-                    </span>
-                  </td>
-                  <td style={td}>
-                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                      <button onClick={() => onEdit(t)} style={editBtn}>Edit</button>
-                      
-                      {/* ✅ Delete Button restricted explicitly to active Admin status levels */}
-                      {isAdmin && (
-                        <button onClick={() => handleDelete(t.tenantId, t.fullName)} style={deleteBtn}>Delete</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
+              currentPagedDataSlice.map(t => {
+                const isExited = t.isActive === false;
+                const targetId = t.tenantId || t.id;
+
+                return (
+                  <tr key={targetId} style={{ ...tableRow, ...(isExited ? rowExitedStyle : {}) }}>
+                    <td style={td}>
+                      <strong>{t.fullName}</strong> ({t.gender})<br/>
+                      <small>{t.phoneNumber}</small><br/>
+                      <div style={addressMini}>{t.address}</div>
+                    </td>
+                    <td style={td}>
+                      {t.hostelName}<br/>
+                      <small>Room: {t.roomNumber} | Bed: {t.bedNumber}</small><br/>
+                      <small style={{color: "#666"}}>In: {t.checkInDate}</small>
+                    </td>
+                    <td style={td}>
+                      {t.guardianName}<br/>
+                      <small>Ph: {t.guardianPhone}</small>
+                    </td>
+                    <td style={td}>
+                      <span style={t.isActive ? statusActive : statusInactive}>
+                        {t.isActive ? "Active" : "Exited"}
+                      </span>
+                    </td>
+                    <td style={td}>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        {/* Edit Button - Always Available */}
+                        <button onClick={() => onEdit(t)} style={editBtn}>
+                          Edit
+                        </button>
+                        
+                        {/* Delete Button - Only shown for Active tenants */}
+                        {isAdmin && !isExited && (
+                          <button 
+                            onClick={() => handleDelete(targetId, t.fullName)} 
+                            style={deleteBtn}
+                            title="Mark as Exited"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -238,12 +274,14 @@ const headerRow = { background: "#f8f9fa", borderBottom: "2px solid #dee2e6", te
 const th = { padding: "12px" };
 const td = { padding: "12px", verticalAlign: "top", fontSize: "14px" };
 const tableRow = { borderBottom: "1px solid #eee" };
+const rowExitedStyle = { background: "#fff8f8" };
 const addressMini = { fontSize: "11px", color: "#888", marginTop: "4px", maxWidth: "180px" };
-const editBtn = { padding: "5px 10px", background: "#ffc107", border: "none", borderRadius: "4px", cursor: "pointer" };
-const deleteBtn = { padding: "5px 10px", background: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" };
 
-const statusActive = { color: "green", fontWeight: "bold" };
-const statusInactive = { color: "red", fontWeight: "bold" };
+const editBtn = { padding: "5px 10px", background: "#ffc107", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "600" };
+const deleteBtn = { padding: "5px 10px", background: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "600" };
+
+const statusActive = { color: "#1a7f37", fontWeight: "bold", background: "#e6f4ea", padding: "2px 8px", borderRadius: "12px", fontSize: "12px" };
+const statusInactive = { color: "#cf222e", fontWeight: "bold", background: "#ffebe9", padding: "2px 8px", borderRadius: "12px", fontSize: "12px" };
 
 const paginationWrapperStyle = {
   display: "flex",

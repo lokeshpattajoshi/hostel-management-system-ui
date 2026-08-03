@@ -8,7 +8,7 @@ import {
 } from "../services/api";
 
 const CreateTenant = ({ onCancel }) => {
-  // ✅ Directly initialize form fields using the logged-in user session from localStorage
+  // Directly initialize form fields using the logged-in user session from localStorage
   const [formData, setFormData] = useState(() => {
     const loggedInUid = localStorage.getItem("userId") || "";
     return {
@@ -58,16 +58,18 @@ const CreateTenant = ({ onCancel }) => {
   const [systemUsers, setSystemUsers] = useState([]); 
   const [selectedHostel, setSelectedHostel] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("");
-  const [errorStatus, setErrorStatus] = useState("");
+  
+  // State to manage Modal Error Popup visibility and message
+  const [errorModal, setErrorModal] = useState({ isOpen: false, message: "" });
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const hData = await fetchHostelsApi();
-        setHostels(hData || []);
+        setHostels(Array.isArray(hData) ? hData : []);
 
         const uData = await fetchUsersApi();
-        const usersList = uData || [];
+        const usersList = Array.isArray(uData) ? uData : [];
         setSystemUsers(usersList);
 
         // Fallback default resolution if localStorage was empty during component initialization
@@ -104,7 +106,7 @@ const CreateTenant = ({ onCancel }) => {
 
     if (hId) {
       const rData = await fetchRoomsByHostelApi(hId);
-      setRooms(rData || []);
+      setRooms(Array.isArray(rData) ? rData : []);
     }
   };
 
@@ -116,7 +118,7 @@ const CreateTenant = ({ onCancel }) => {
 
     if (rId) {
       const bData = await fetchAvailableBedsApi(rId);
-      setBeds(bData || []);
+      setBeds(Array.isArray(bData) ? bData : []);
     }
   };
 
@@ -125,9 +127,16 @@ const CreateTenant = ({ onCancel }) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-const handleSubmit = async (e) => {
+  const showErrorPopup = (msg) => {
+    setErrorModal({ isOpen: true, message: msg });
+  };
+
+  const closeErrorPopup = () => {
+    setErrorModal({ isOpen: false, message: "" });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrorStatus("");
 
     // 1. Numerical Parsing for Foreign Keys & Session Metrics
     const parsedOnboardedBy = parseInt(formData.onboardedBy, 10);
@@ -138,12 +147,12 @@ const handleSubmit = async (e) => {
     
     // 2. Explicit Structural Validation Checks
     if (isNaN(parsedOnboardedBy)) {
-      setErrorStatus("A valid Staff/User must be selected to process this onboarding.");
+      showErrorPopup("A valid Staff/User must be selected to process this onboarding.");
       return;
     }
 
     if (isNaN(parsedReceivedBy)) {
-      setErrorStatus("A valid Receiver must be selected in the Paid To field.");
+      showErrorPopup("A valid Receiver must be selected in the Paid To field.");
       return;
     }
 
@@ -174,24 +183,43 @@ const handleSubmit = async (e) => {
     // 4. API Transmission Sequence
     try {
       const response = await createTenantApi(payload);
+      
+      // Handle explicit API error responses returned by fetchWithAuth
+      if (response && response.error) {
+        showErrorPopup(response.message || "Failed to onboard tenant. Please check input parameters.");
+        return;
+      }
+
       if (response) {
         alert("Tenant onboarded successfully!");
         onCancel();
       } else {
-        setErrorStatus("Server rejected transaction. Please verify database parameters match.");
+        showErrorPopup("Server rejected transaction. Please verify database parameters match.");
       }
     } catch (err) {
-      setErrorStatus("Network failure: " + err.message);
+      showErrorPopup("Network failure: " + err.message);
     }
   };
 
   return (
     <div style={containerStyle}>
       <h3 style={{ borderBottom: "2px solid #007bff", paddingBottom: "10px" }}>Onboard New Tenant</h3>
-      
-      {errorStatus && (
-        <div style={{ padding: "10px", marginBottom: "15px", backgroundColor: "#f8d7da", color: "#721c24", borderRadius: "4px", border: "1px solid #f5c6cb" }}>
-          {errorStatus}
+
+      {/* ERROR MODAL POPUP */}
+      {errorModal.isOpen && (
+        <div style={modalOverlayStyle}>
+          <div style={modalContentStyle}>
+            <div style={modalHeaderStyle}>
+              <span style={{ fontSize: "20px" }}>⚠️ Error</span>
+              <button onClick={closeErrorPopup} style={closeXBtnStyle}>&times;</button>
+            </div>
+            <div style={modalBodyStyle}>
+              {errorModal.message}
+            </div>
+            <div style={modalFooterStyle}>
+              <button onClick={closeErrorPopup} style={modalCloseBtnStyle}>Close</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -206,12 +234,16 @@ const handleSubmit = async (e) => {
             <select name="gender" value={formData.gender} onChange={handleChange} style={inputStyle}>
               <option value="MALE">Male</option>
               <option value="FEMALE">Female</option>
+              <option value="OTHER">Other</option>
             </select>
           </div>
           <div style={{ display: "flex", gap: "5px" }}>
             <select name="identityType" value={formData.identityType} onChange={handleChange} style={{ flex: 1, ...inputStyle }}>
               <option value="AADHAR">Aadhaar</option>
               <option value="PAN">PAN</option>
+              <option value="PASSPORT">Passport</option>
+              <option value="VOTER_ID">Voter ID</option>
+              <option value="DRIVING_LICENSE">Driving License</option>
             </select>
             <input type="text" name="identityNumber" value={formData.identityNumber} placeholder="ID Number" onChange={handleChange} required style={{ flex: 2, ...inputStyle }} />
           </div>
@@ -228,6 +260,8 @@ const handleSubmit = async (e) => {
           <div style={{ display: "flex", gap: "5px" }}>
             <select name="guardianIdentityType" value={formData.guardianIdentityType} onChange={handleChange} style={{ flex: 1, ...inputStyle }}>
               <option value="AADHAR">Aadhaar</option>
+              <option value="PAN">PAN</option>
+              <option value="PASSPORT">Passport</option>
               <option value="OTHER">Other</option>
             </select>
             <input type="text" name="guardianIdentityNumber" value={formData.guardianIdentityNumber} placeholder="ID Number" onChange={handleChange} style={{ flex: 2, ...inputStyle }} />
@@ -354,12 +388,18 @@ const handleSubmit = async (e) => {
             required 
             style={inputStyle}
           >
-            <option value="">-- Choose Receiver --</option>
-            {systemUsers.map(u => {
-              const uId = u.id || u.userId;
-              return <option key={uId} value={uId}>{u.fullName || u.username || `User #${uId}`}</option>;
-            })}
-          </select>
+         <option value="">-- Choose Receiver (Admin) --</option>
+         {systemUsers
+        .filter(u => (u.role && u.role.toUpperCase() === "ADMIN") || u.isAdmin === true)
+        .map(u => {
+        const uId = u.id || u.userId;
+        return (
+          <option key={uId} value={uId}>
+            {u.fullName || u.username || `Admin #${uId}`}
+         </option>
+       );
+     })}
+    </select>
 
           <input 
             type="text" 
@@ -385,12 +425,78 @@ const handleSubmit = async (e) => {
   );
 };
 
-const containerStyle = { background: "#fff", padding: "20px", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", color: "#333" };
+// Layout & Form Styling
+const containerStyle = { background: "#fff", padding: "20px", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", color: "#333", position: "relative" };
 const formGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" };
 const sectionStyle = { padding: "15px", border: "1px solid #eee", borderRadius: "6px" };
 const inputStyle = { width: "100%", padding: "10px", margin: "5px 0", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box", background: "#fff", color: "#333" };
 const labelStyle = { fontSize: "11px", color: "#666", display: "block", marginTop: "6px" };
 const submitBtn = { padding: "12px 25px", background: "#28a745", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" };
 const cancelBtn = { padding: "12px 25px", background: "#6c757d", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" };
+
+// Modal Popup Styling
+const modalOverlayStyle = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100vw",
+  height: "100vh",
+  backgroundColor: "rgba(0, 0, 0, 0.5)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999
+};
+
+const modalContentStyle = {
+  background: "#fff",
+  borderRadius: "8px",
+  width: "90%",
+  maxWidth: "450px",
+  boxShadow: "0 5px 15px rgba(0,0,0,0.3)",
+  overflow: "hidden"
+};
+
+const modalHeaderStyle = {
+  background: "#dc3545",
+  color: "#fff",
+  padding: "12px 20px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  fontWeight: "bold"
+};
+
+const closeXBtnStyle = {
+  background: "none",
+  border: "none",
+  color: "#fff",
+  fontSize: "24px",
+  cursor: "pointer",
+  lineHeight: 1
+};
+
+const modalBodyStyle = {
+  padding: "20px",
+  fontSize: "14px",
+  color: "#333",
+  lineHeight: "1.5"
+};
+
+const modalFooterStyle = {
+  padding: "10px 20px 15px",
+  display: "flex",
+  justifyContent: "flex-end"
+};
+
+const modalCloseBtnStyle = {
+  padding: "8px 20px",
+  background: "#dc3545",
+  color: "#fff",
+  border: "none",
+  borderRadius: "4px",
+  cursor: "pointer",
+  fontWeight: "bold"
+};
 
 export default CreateTenant;

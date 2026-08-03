@@ -3,8 +3,8 @@
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 /**
- * Robust helper to handle Authentication and JSON parsing safely.
- * Enforces array type protections to systematically prevent ".filter() is not a function" crashes.
+ * Helper to handle Authentication, HTTP Errors, and JSON parsing safely.
+ * Returns { error: true, status, message } on failure to prevent false success states.
  */
 export const fetchWithAuth = async (endpoint, options = {}) => {
   const token = localStorage.getItem("token");
@@ -20,31 +20,47 @@ export const fetchWithAuth = async (endpoint, options = {}) => {
       window.dispatchEvent(authEvent);
       localStorage.clear();
       window.location.href = "/";
-      return null;
+      return { error: true, status: 401, message: "Unauthorized / Session Expired" };
     }
 
     // Handle No Content (Delete or empty results)
     if (response.status === 204) return [];
 
     const text = await response.text();
-    if (!text) return []; 
+    let parsedData = null;
 
-    try {
-      const parsedData = JSON.parse(text);
-      
-      // Intercept backend Error/Exception JSON objects to preserve React loops
-      if (parsedData && typeof parsedData === "object" && (parsedData.status || parsedData.error)) {
-        console.warn(`Intercepted a backend error object on ${endpoint}:`, parsedData);
-        return [];
+    if (text) {
+      try {
+        parsedData = JSON.parse(text);
+      } catch (e) {
+        parsedData = text; // Fallback to raw string if not JSON
       }
-      
-      return parsedData;
-    } catch (e) {
-      return text; // Return as string if not valid JSON
     }
+
+    // ✅ CHECK FOR HTTP ERROR STATUSES (400, 404, 500, etc.)
+    if (!response.ok) {
+      const errorMessage =
+        (typeof parsedData === "object" && (parsedData?.message || parsedData?.error)) ||
+        `Server error (${response.status})`;
+
+      console.error(`API Error [${response.status}] on ${endpoint}:`, parsedData);
+
+      return {
+        error: true,
+        status: response.status,
+        message: errorMessage,
+        data: parsedData,
+      };
+    }
+
+    return parsedData ?? [];
   } catch (error) {
-    console.error("Fetch Error:", error);
-    return null;
+    console.error("Fetch Network Error:", error);
+    return {
+      error: true,
+      status: 0,
+      message: "Network error or server unreachable.",
+    };
   }
 };
 
@@ -57,17 +73,15 @@ export const login = async (email, password) => {
       body: JSON.stringify({ email, password }),
     });
 
-    // If the server returns an error status (like 400 or 401)
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      return { error: errorData.message || "Invalid credentials" };
+      return { error: true, message: errorData.message || "Invalid credentials" };
     }
 
-    // Safely parse the response into a JSON object (contains your token, etc.)
     return await response.json();
   } catch (error) {
     console.error("Login Network Error:", error);
-    return { error: "Cannot connect to server. Please check your connection." };
+    return { error: true, message: "Cannot connect to server. Please check your connection." };
   }
 };
 
@@ -140,35 +154,20 @@ export const fetchPendingTenantChargesApi = (tenantId) =>
 
 // --- RESTORED REPORTING METHODS ---
 export const fetchDashboardSummaryApi = async (payload) => {
-  try {
-    return await fetchWithAuth("/reports/dashboard-summary", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-  } catch (error) {
-    console.error("Error generating dashboard summary parameters:", error);
-    return null;
-  }
+  return await fetchWithAuth("/reports/dashboard-summary", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 };
 
 export const fetchIncomeReportDetailsApi = async (hostelId, startDate, endDate) => {
-  try {
-    const url = `/income?hostelId=${hostelId}&startDate=${startDate}&endDate=${endDate}`;
-    return await fetchWithAuth(url);
-  } catch (error) {
-    console.error("Error routing out income detailed report:", error);
-    return [];
-  }
+  const url = `/income?hostelId=${hostelId}&startDate=${startDate}&endDate=${endDate}`;
+  return await fetchWithAuth(url);
 };
 
 export const fetchExpenseReportDetailsApi = async (hostelId, startDate, endDate) => {
-  try {
-    const url = `/expenses/hostel/${hostelId}/date-range?startDate=${startDate}&endDate=${endDate}`;
-    return await fetchWithAuth(url);
-  } catch (error) {
-    console.error("Error routing out expense detailed report:", error);
-    return [];
-  }
+  const url = `/expenses/hostel/${hostelId}/date-range?startDate=${startDate}&endDate=${endDate}`;
+  return await fetchWithAuth(url);
 };
 
 // --- APPROVALS QUEUE SYSTEM ---
@@ -180,13 +179,8 @@ export const createApprovalRequestApi = (data) =>
  * GET /api/approval/pending
  */
 export const fetchPendingApprovalsApi = async () => {
-  try {
-    const url = `/approval/pending`;
-    return await fetchWithAuth(url);
-  } catch (error) {
-    console.error("Error fetching pending approvals ledger:", error);
-    return [];
-  }
+  const url = `/approval/pending`;
+  return await fetchWithAuth(url);
 };
 
 /**
@@ -194,13 +188,8 @@ export const fetchPendingApprovalsApi = async () => {
  * POST /api/approval/{id}/approve?approvedBy={adminId}
  */
 export const approveRequestApi = async (id, adminId, remarks) => {
-  try {
-    const url = `/approval/${id}/approve?approvedBy=${encodeURIComponent(adminId)}`;
-    return await fetchWithAuth(url, { method: 'POST' });
-  } catch (error) {
-    console.error(`Error processing approval for record ID #${id}:`, error);
-    return null;
-  }
+  const url = `/approval/${id}/approve?approvedBy=${encodeURIComponent(adminId)}`;
+  return await fetchWithAuth(url, { method: 'POST' });
 };
 
 /**
@@ -208,35 +197,10 @@ export const approveRequestApi = async (id, adminId, remarks) => {
  * POST /api/approval/{id}/reject?approvedBy={adminId}&reason={remarks}
  */
 export const rejectRequestApi = async (id, adminId, remarks) => {
-  try {
-    const url = `/approval/${id}/reject?approvedBy=${encodeURIComponent(adminId)}&reason=${encodeURIComponent(remarks)}`;
-    return await fetchWithAuth(url, { method: 'POST' });
-  } catch (error) {
-    console.error(`Error processing rejection on record ID #${id}:`, error);
-    return null;
-  }
+  const url = `/approval/${id}/reject?approvedBy=${encodeURIComponent(adminId)}&reason=${encodeURIComponent(remarks)}`;
+  return await fetchWithAuth(url, { method: 'POST' });
 };
 
-export const fetchMyPendingApprovalsApi = async (
-    page = 0,
-    size = 10
-) => {
-
-    const token = localStorage.getItem("token");
-
-    const response = await fetch(
-        `${API_BASE_URL}/approval/pending?page=${page}&size=${size}`,
-        {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json"
-            }
-        }
-    );
-
-    if (!response.ok) {
-        return null;
-    }
-
-    return await response.json();
+export const fetchMyPendingApprovalsApi = async (page = 0, size = 10) => {
+  return await fetchWithAuth(`/approval/pending?page=${page}&size=${size}`);
 };

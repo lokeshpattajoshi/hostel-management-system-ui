@@ -16,6 +16,9 @@ const CreateIncome = ({ onSave, onCancel }) => {
   const [loadingData, setLoadingData] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Income entry type: STANDARD (Paying current due) or ADVANCE (Paying upcoming month)
+  const [incomeType, setIncomeType] = useState("STANDARD");
+  
   // Financial profile tracking
   const [activeCharge, setActiveCharge] = useState(null);
   
@@ -31,15 +34,15 @@ const CreateIncome = ({ onSave, onCancel }) => {
     description: "",
     transactionId: "",
     advanceAmount: 0,
-    createdBy: currentUserId, // Dynamic ID instead of hardcoded 3
-    receivedByUserId: "" // Mapped to API receivedByUserId
+    createdBy: currentUserId,
+    receivedByUserId: ""
   });
 
   useEffect(() => {
     const initFormReferences = async () => {
       try {
         const hostelData = await fetchHostelsApi();
-        const adminData = await fetchAdminUsersApi(); // Matches structural approach of CreateExpense
+        const adminData = await fetchAdminUsersApi();
         
         setHostels(hostelData || []);
         setAdmins(adminData || []);
@@ -122,8 +125,6 @@ const CreateIncome = ({ onSave, onCancel }) => {
       
       const url = `/income/pending-summary?hostelId=${selectedHostel}&tenantId=${targetTenant.tenantId || targetTenant.id}&_t=${Date.now()}`;
       const response = await fetchWithAuth(url);
-      
-      console.log("--- PENDING SUMMARY BACKEND PAYLOAD ---", response);
 
       const rawCharges = Array.isArray(response) 
         ? response 
@@ -131,7 +132,6 @@ const CreateIncome = ({ onSave, onCancel }) => {
 
       if (rawCharges.length > 0) {
         const primaryBill = rawCharges[0];
-        console.log("Targeting Primary Summary Object:", primaryBill);
 
         const parsedTotal = parseFloat(primaryBill.totalAmount ?? 0);
         const parsedPaid = parseFloat(primaryBill.paidAmount ?? 0);
@@ -140,33 +140,44 @@ const CreateIncome = ({ onSave, onCancel }) => {
 
         const dynamicChargeState = {
           chargeId: parsedChargeId,
-          tenantName: primaryBill.tenantName || targetTenant.tenantName,
+          tenantName: primaryBill.tenantName || targetTenant.tenantName || targetTenant.fullName,
           totalAmount: parsedTotal,
           paidAmount: parsedPaid,
           balanceAmount: parsedBalance,
           chargeType: primaryBill.chargeType || "RENT"
         };
 
-        console.log("Calculated State Map Applied:", dynamicChargeState);
         setActiveCharge(dynamicChargeState);
         
+        // Auto-detect mode: If balance is zero, offer advance mode by default
+        if (parsedBalance === 0) {
+          setIncomeType("ADVANCE");
+        } else {
+          setIncomeType("STANDARD");
+        }
+
         setFormData(prev => ({
           ...prev,
           tenantId: primaryBill.tenantId || targetTenant.tenantId || targetTenant.id,
           chargeId: parsedChargeId,
-          amount: parsedBalance 
+          amount: parsedBalance > 0 ? parsedBalance : "" 
         }));
       } else {
-        console.log("No summary ledger arrays found. Resetting defaults.");
+        // Fallback when no active bill exists
         setActiveCharge({
           chargeId: null,
-          tenantName: targetTenant.tenantName,
+          tenantName: targetTenant.tenantName || targetTenant.fullName,
           totalAmount: 0,
           paidAmount: 0,
           balanceAmount: 0,
-          chargeType: "No Pending Bills"
+          chargeType: "Fully Paid / Renewal Needed"
         });
-        setFormData(prev => ({ ...prev, tenantId: targetTenant.tenantId || targetTenant.id, amount: 0 }));
+        setIncomeType("ADVANCE");
+        setFormData(prev => ({ 
+          ...prev, 
+          tenantId: targetTenant.tenantId || targetTenant.id, 
+          amount: "" 
+        }));
       }
     } catch (error) {
       console.error("API error parsing financial components:", error);
@@ -187,8 +198,13 @@ const CreateIncome = ({ onSave, onCancel }) => {
   // LEDGER CONTEXT CALCULATIONS
   const totalOutstanding = activeCharge ? activeCharge.balanceAmount : 0;
   const amountPayingNow = parseFloat(formData.amount) || 0;
-  const subsequentRemainingBalance = totalOutstanding - amountPayingNow;
-  const isOverpaid = amountPayingNow > totalOutstanding;
+  
+  const subsequentRemainingBalance = incomeType === "STANDARD" 
+    ? Math.max(0, totalOutstanding - amountPayingNow) 
+    : 0;
+
+  // Validation: Overpaid check only applies in standard bill payment mode
+  const isOverpaid = incomeType === "STANDARD" && totalOutstanding > 0 && amountPayingNow > totalOutstanding;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -197,20 +213,25 @@ const CreateIncome = ({ onSave, onCancel }) => {
       return;
     }
 
+    if (amountPayingNow <= 0) {
+      alert("Validation Error: Please enter a valid payment amount greater than zero.");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       const payload = {
         hostelId: parseInt(selectedHostel),
         tenantId: parseInt(formData.tenantId),
-        chargeId: formData.chargeId ? parseInt(formData.chargeId) : null,
+        chargeId: incomeType === "STANDARD" && formData.chargeId ? parseInt(formData.chargeId) : null,
         amount: amountPayingNow,
         incomeDate: formData.incomeDate,
         paymentMode: formData.paymentMode,
-        description: formData.description,
+        description: formData.description || (incomeType === "ADVANCE" ? "Monthly advance/renewal income collection" : "Standard bill payment"),
         transactionId: formData.transactionId,
-        advanceAmount: parseFloat(formData.advanceAmount) || 0,
+        advanceAmount: incomeType === "ADVANCE" ? amountPayingNow : (parseFloat(formData.advanceAmount) || 0),
         createdBy: formData.createdBy,
-        receivedByUserId: formData.receivedByUserId ? parseInt(formData.receivedByUserId) : null // Maps correctly downstream
+        receivedByUserId: formData.receivedByUserId ? parseInt(formData.receivedByUserId) : null
       };
 
       const res = await createIncomeApi(payload);
@@ -261,7 +282,7 @@ const CreateIncome = ({ onSave, onCancel }) => {
           </select>
         </div>
 
-        {/* PROFILE IDENTIFIER BANNER */}
+        {/* PROFILE BANNER */}
         {activeCharge && (
           <div style={profileBannerStyle}>
             <div style={{ fontWeight: "600", color: "#2c3e50" }}>
@@ -273,7 +294,7 @@ const CreateIncome = ({ onSave, onCancel }) => {
           </div>
         )}
 
-        {/* LEDGER HISTORICAL BREAKDOWN VISUAL CARDS */}
+        {/* LEDGER HISTORICAL BREAKDOWN CARDS */}
         {activeCharge && (
           <div style={historyDashboardStyle}>
             <div style={historyCard}>
@@ -285,15 +306,47 @@ const CreateIncome = ({ onSave, onCancel }) => {
               <span style={{ ...historyValue, color: "#27ae60" }}>₹{activeCharge.paidAmount.toFixed(2)}</span>
             </div>
             <div style={historyCard}>
-              <span style={historyLabel}>Current Amount to be Paid</span>
-              <span style={{ ...historyValue, color: "#c0392b" }}>₹{activeCharge.balanceAmount.toFixed(2)}</span>
+              <span style={historyLabel}>Current Outstanding Due</span>
+              <span style={{ ...historyValue, color: activeCharge.balanceAmount > 0 ? "#c0392b" : "#27ae60" }}>
+                ₹{activeCharge.balanceAmount.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* PAYMENT TYPE TOGGLE */}
+        {activeCharge && (
+          <div style={{ ...fieldGroup, gridColumn: "1 / -1", background: "#f8f9fa", padding: "10px", borderRadius: "6px", border: "1px solid #dee2e6" }}>
+            <label style={{ ...labelStyle, fontWeight: "bold", marginBottom: "8px" }}>Collection Category Context:</label>
+            <div style={{ display: "flex", gap: "20px" }}>
+              <label style={{ fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+                <input 
+                  type="radio" 
+                  name="incomeType" 
+                  value="STANDARD" 
+                  checked={incomeType === "STANDARD"} 
+                  disabled={totalOutstanding === 0}
+                  onChange={() => setIncomeType("STANDARD")} 
+                />
+                Pay Pending Bill Due (₹{totalOutstanding.toFixed(2)})
+              </label>
+              <label style={{ fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+                <input 
+                  type="radio" 
+                  name="incomeType" 
+                  value="ADVANCE" 
+                  checked={incomeType === "ADVANCE"} 
+                  onChange={() => setIncomeType("ADVANCE")} 
+                />
+                New Monthly Renewal / Advance Payment
+              </label>
             </div>
           </div>
         )}
 
         {/* ENTRY FIELDS */}
         <div style={{ ...fieldGroup, borderLeft: "3px solid #007bff", paddingLeft: "10px", marginTop: "10px" }}>
-          <label style={labelStyle}>Total Amount to be Paid (₹)</label>
+          <label style={labelStyle}>Current Outstanding Due (₹)</label>
           <input 
             type="text" 
             value={activeCharge ? `₹ ${totalOutstanding.toFixed(2)}` : "₹ 0.00"} 
@@ -309,9 +362,9 @@ const CreateIncome = ({ onSave, onCancel }) => {
             name="amount" 
             value={formData.amount} 
             onChange={handleChange} 
-            disabled={!activeCharge || totalOutstanding === 0}
+            disabled={!activeCharge}
             required 
-            min="0"
+            min="0.01"
             step="0.01"
             style={{ 
               ...inputStyle, 
@@ -321,13 +374,13 @@ const CreateIncome = ({ onSave, onCancel }) => {
           />
           {isOverpaid && (
             <span style={{ color: "#dc3545", fontSize: "11px", marginTop: "3px", fontWeight: "bold" }}>
-              Error: Cannot pay more than balance left!
+              Error: Cannot pay more than balance left! Select "Advance Payment" above to record future amounts.
             </span>
           )}
         </div>
 
         <div style={{ ...fieldGroup, borderLeft: "3px solid #ffc107", paddingLeft: "10px", marginTop: "10px" }}>
-          <label style={labelStyle}>Balance Amount Remaining (₹)</label>
+          <label style={labelStyle}>Balance Remaining on Bill (₹)</label>
           <input 
             type="text" 
             value={isOverpaid ? "Overpayment Error" : `₹ ${subsequentRemainingBalance.toFixed(2)}`} 
@@ -341,7 +394,7 @@ const CreateIncome = ({ onSave, onCancel }) => {
           />
         </div>
 
-        {/* EXTRA METADATA */}
+        {/* METADATA */}
         <div style={fieldGroup}>
           <label style={labelStyle}>Income Posting Date</label>
           <input type="date" name="incomeDate" value={formData.incomeDate} onChange={handleChange} required style={inputStyle} />
@@ -396,11 +449,11 @@ const CreateIncome = ({ onSave, onCancel }) => {
           <button type="button" onClick={onCancel} disabled={isSubmitting} style={cancelBtn}>Cancel</button>
           <button 
             type="submit" 
-            disabled={!activeCharge || isOverpaid || isSubmitting || totalOutstanding === 0} 
+            disabled={!activeCharge || isOverpaid || isSubmitting || amountPayingNow <= 0} 
             style={{ 
               ...submitBtn, 
-              opacity: (!activeCharge || isOverpaid || isSubmitting || totalOutstanding === 0) ? 0.6 : 1, 
-              cursor: (!activeCharge || isOverpaid || isSubmitting || totalOutstanding === 0) ? "not-allowed" : "pointer" 
+              opacity: (!activeCharge || isOverpaid || isSubmitting || amountPayingNow <= 0) ? 0.6 : 1, 
+              cursor: (!activeCharge || isOverpaid || isSubmitting || amountPayingNow <= 0) ? "not-allowed" : "pointer" 
             }}
           >
             {isSubmitting ? "Processing..." : "Post Income"}
