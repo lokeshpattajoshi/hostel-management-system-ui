@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { 
   fetchPendingApprovalsApi, 
   approveRequestApi, 
@@ -11,45 +11,48 @@ function ApprovalQueueManagementApp() {
   const [error, setError] = useState(null);
   const [actionRemarks, setActionRemarks] = useState({});
 
-  // Pagination State
+  // Server-side pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5; 
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const pageSize = 10; 
 
   const adminId = localStorage.getItem("userId") || "1"; 
 
-  useEffect(() => {
-    loadApprovalQueue();
-  }, []);
-
-  const loadApprovalQueue = async () => {
+  // Load approvals from server using 0-based indexing for Spring Boot
+  const loadApprovalQueue = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPendingApprovalsApi();
-      if (data) {
-        let cleanData = [];
-        if (data.content && Array.isArray(data.content)) {
-          cleanData = data.content;
-        } else if (Array.isArray(data)) {
-          cleanData = data;
-        }
-        
-        setApprovals(cleanData);
-        
-        const maxPages = Math.ceil(cleanData.length / itemsPerPage);
-        if (currentPage > maxPages && maxPages > 0) {
-          setCurrentPage(maxPages);
-        }
+      const pageIndex = currentPage - 1;
+      const data = await fetchPendingApprovalsApi(pageIndex, pageSize);
+
+      if (data && data.content) {
+        setApprovals(data.content);
+        setTotalPages(data.totalPages || 1);
+        setTotalElements(data.totalElements || 0);
+      } else if (Array.isArray(data)) {
+        // Fallback for flat array responses
+        setApprovals(data);
+        setTotalPages(1);
+        setTotalElements(data.length);
       } else {
-        setError("Failed to retrieve the pending approvals ledger.");
+        setApprovals([]);
+        setTotalPages(1);
+        setTotalElements(0);
       }
     } catch (err) {
       console.error("API Error:", err);
-      setError("An error occurred while loading the data.");
+      setError("An error occurred while loading the pending authorization ledger.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, pageSize]);
+
+  // Fetch data on initial mount & page change
+  useEffect(() => {
+    loadApprovalQueue();
+  }, [loadApprovalQueue]);
 
   const handleAction = async (approvalId, actionType) => {
     const customRemarks = actionRemarks[approvalId] || "Processed via Management Console";
@@ -68,12 +71,7 @@ function ApprovalQueueManagementApp() {
         return updated;
       });
 
-      const remainingCount = approvals.length - 1;
-      const maxPages = Math.ceil(remainingCount / itemsPerPage);
-      if (currentPage > maxPages && maxPages > 0) {
-        setCurrentPage(maxPages);
-      }
-
+      // Reload queue to fetch updated server slice
       loadApprovalQueue();
     } else {
       alert(`Failed to complete the requested ${actionType.toLowerCase()} action.`);
@@ -96,21 +94,17 @@ function ApprovalQueueManagementApp() {
     });
   };
 
-  // Pagination processing
-  const totalItems = approvals.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentApprovals = approvals.slice(indexOfFirstItem, indexOfLastItem);
+  const startIndex = totalElements === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endIndex = Math.min(currentPage * pageSize, totalElements);
 
   if (loading) return <div style={msgStyle}>Loading pending queue entries...</div>;
   if (error) return <div style={{ ...msgStyle, color: "#e53e3e" }}>{error}</div>;
 
   return (
     <div style={containerStyle}>
-      <h3 style={titleStyle}>Pending Authorization Items ({totalItems})</h3>
+      <h3 style={titleStyle}>Pending Authorization Items ({totalElements})</h3>
       
-      {totalItems === 0 ? (
+      {totalElements === 0 ? (
         <div style={emptyStateStyle}>
           ✅ Clear skies! There are no pending approvals requiring attention right now.
         </div>
@@ -135,7 +129,7 @@ function ApprovalQueueManagementApp() {
                 </tr>
               </thead>
               <tbody>
-                {currentApprovals.map((item) => (
+                {approvals.map((item) => (
                   <tr key={item.approvalId} style={trStyle}>
                     <td style={tdStyle}><strong>#{item.approvalId}</strong></td>
                     <td style={tdStyle}><strong>{item.hostelName || "N/A"}</strong></td>
@@ -184,8 +178,13 @@ function ApprovalQueueManagementApp() {
             </table>
           </div>
 
-          {totalPages > 1 && (
-            <div style={paginationContainer}>
+          {/* Server Pagination Controls */}
+          <div style={paginationContainer}>
+            <div style={{ fontSize: "13px", color: "#4a5568" }}>
+              Showing <strong>{startIndex}</strong> to <strong>{endIndex}</strong> of <strong>{totalElements}</strong> items
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
@@ -212,7 +211,7 @@ function ApprovalQueueManagementApp() {
                 Next
               </button>
             </div>
-          )}
+          </div>
         </>
       )}
     </div>
@@ -235,7 +234,7 @@ const inputStyle = { width: "90%", padding: "6px 10px", border: "1px solid #cbd5
 const approveBtnStyle = { background: "#38a169", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginRight: "8px", fontSize: "13px" };
 const rejectBtnStyle = { background: "#e53e3e", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "4px", fontWeight: "600", cursor: "pointer", fontSize: "13px" };
 
-const paginationContainer = { display: "flex", justifyContent: "center", alignItems: "center", gap: "15px", marginTop: "20px", paddingTop: "15px", borderTop: "1px solid #edf2f7" };
+const paginationContainer = { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", paddingTop: "15px", borderTop: "1px solid #edf2f7" };
 const paginationBtn = { background: "#edf2f7", color: "#4a5568", border: "1px solid #cbd5e0", padding: "6px 12px", borderRadius: "4px", fontSize: "13px", fontWeight: "600", outline: "none" };
 const paginationText = { fontSize: "13px", color: "#4a5568" };
 

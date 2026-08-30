@@ -116,11 +116,60 @@ export const createBedApi = (data) => fetchWithAuth("/beds", { method: "POST", b
 export const updateBedApi = (id, data) => fetchWithAuth(`/beds/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteBedApi = (id) => fetchWithAuth(`/beds/${id}`, { method: "DELETE" });
 
-// --- TENANTS ---
-export const fetchTenantsApi = (name = "", phone = "", hostelId = "") => {
-  const query = `name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}&hostelId=${hostelId}`;
-  return fetchWithAuth(`/tenants?${query}`);
+/**
+ * Universal helper for paginated endpoints (Tenants & Approvals).
+ * Loops through pages dynamically until `last: true` or all pages are fetched.
+ */
+export const fetchAllPages = async (endpoint, baseParams = {}, pageSize = 100) => {
+  let allRecords = [];
+  let currentPage = 0;
+  let isLastPage = false;
+
+  while (!isLastPage) {
+    const params = new URLSearchParams(baseParams);
+    params.append("pageNumber", currentPage);
+    params.append("pageSize", pageSize);
+
+    const response = await fetchWithAuth(`${endpoint}?${params.toString()}`);
+
+    if (response && Array.isArray(response.content)) {
+      allRecords = [...allRecords, ...response.content];
+      isLastPage = response.last !== undefined 
+        ? response.last 
+        : currentPage + 1 >= (response.totalPages || 1);
+      currentPage++;
+    } else if (Array.isArray(response)) {
+      // Fallback in case endpoint returns a flat array
+      return response;
+    } else {
+      break;
+    }
+  }
+
+  return allRecords;
 };
+
+export const fetchAllTenantsForDropdownApi = (hostelId = "") => {
+  const queryParams = {};
+  if (hostelId) queryParams.hostelId = hostelId;
+  return fetchAllPages("/tenants", queryParams, 100);
+};
+
+// --- TENANTS ---
+export const fetchTenantsApi = (name = "", phone = "", hostelId = "", pageNumber = 0, pageSize = 10) => {
+  const params = new URLSearchParams();
+
+  if (name && name.trim()) params.append("name", name.trim());
+  if (phone && phone.trim()) params.append("phone", phone.trim());
+  if (hostelId) params.append("hostelId", hostelId);
+
+  // Append pagination metadata
+  params.append("pageNumber", pageNumber);
+  params.append("pageSize", pageSize);
+
+  return fetchWithAuth(`/tenants?${params.toString()}`);
+};
+
 export const createTenantApi = (data) => fetchWithAuth("/tenants", { method: "POST", body: JSON.stringify(data) });
 export const updateTenantApi = (id, data) => fetchWithAuth(`/tenants/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteTenantApi = (id) => fetchWithAuth(`/tenants/${id}`, { method: "DELETE" });
@@ -178,9 +227,46 @@ export const createApprovalRequestApi = (data) =>
  * Fetch all pending administrative approvals ledger entries.
  * GET /api/approval/pending
  */
-export const fetchPendingApprovalsApi = async () => {
-  const url = `/approval/pending`;
-  return await fetchWithAuth(url);
+export const fetchPendingApprovalsApi = (pageNumber = 0, pageSize = 10) => {
+  const params = new URLSearchParams();
+  params.append("page", pageNumber);
+  params.append("size", pageSize);
+
+  return fetchWithAuth(`/approval/pending?${params.toString()}`);
+};
+
+
+export const fetchAllHostelsForDropdownApi = () => {
+  return fetchAllPages("/hostels", {}, 100);
+};
+
+export const fetchAllAdminsForDropdownApi = async () => {
+  try {
+    // Calling /users directly
+    const response = await fetchWithAuth("/users");
+    
+    // Safely extract array regardless of wrapper structure
+    const users = Array.isArray(response)
+      ? response
+      : response?.data || response?.content || [];
+
+    // Filter for admin users if roles are present, otherwise return full user list
+    const admins = users.filter(user => {
+      const role = user.role || user.userRole;
+      if (typeof role === 'string') {
+        return role.toUpperCase().includes('ADMIN');
+      }
+      if (Array.isArray(user.roles)) {
+        return user.roles.some(r => String(r).toUpperCase().includes('ADMIN'));
+      }
+      return true; // Fallback: return all users if no role field exists
+    });
+
+    return admins.length > 0 ? admins : users;
+  } catch (error) {
+    console.error("Error fetching users for admin dropdown:", error);
+    return [];
+  }
 };
 
 /**

@@ -1,41 +1,57 @@
 import React, { useState, useEffect } from "react";
 import { fetchHostelsApi, fetchTenantsApi, searchIncomeApi, deleteIncomeApi } from "../services/api";
 
-// ✅ Extracted userRole from props
 const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
   const [hostels, setHostels] = useState([]);
   const [allTenants, setAllTenants] = useState([]); // Master bucket for selected hostel
   const [filteredTenants, setFilteredTenants] = useState([]); // Room-specific filtered view bucket
   const [incomes, setIncomes] = useState([]);
-  
+
   // Cascading optional search tracking states
   const [selectedHostel, setSelectedHostel] = useState("");
   const [rooms, setRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState("");
   const [selectedTenant, setSelectedTenant] = useState("");
 
-  // ✅ Computed admin check matching your dashboard formatting profile
+  // Computed admin check matching authorization logic
   const isAdmin = userRole?.toUpperCase() === "ADMIN";
 
   useEffect(() => {
     const loadHostelDropdowns = async () => {
-      const data = await fetchHostelsApi();
-      setHostels(data || []);
+      try {
+        const data = await fetchHostelsApi();
+        setHostels(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Failed to load hostels:", error);
+        setHostels([]);
+      }
     };
+
     loadHostelDropdowns();
     loadAllInitialIncomes();
   }, []);
 
   const loadAllInitialIncomes = async () => {
-    const data = await searchIncomeApi({});
-    setIncomes(data || []);
+    try {
+      const data = await searchIncomeApi({});
+      if (Array.isArray(data)) {
+        setIncomes(data);
+      } else if (data && Array.isArray(data.content)) {
+        setIncomes(data.content);
+      } else {
+        setIncomes([]);
+      }
+    } catch (error) {
+      console.error("Failed to load initial income entries:", error);
+      setIncomes([]);
+    }
   };
 
   // Step 1: Change Hostel -> Fetch all occupants & extract valid unique rooms
   const handleHostelChange = async (e) => {
     const hostelId = e.target.value;
     setSelectedHostel(hostelId);
-    
+
     // Clear out lower-level child dropdown selections
     setSelectedRoom("");
     setSelectedTenant("");
@@ -44,14 +60,35 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
     setFilteredTenants([]);
 
     if (hostelId) {
-      const tenantData = await fetchTenantsApi("", "", hostelId);
-      const safeTenants = tenantData || [];
-      setAllTenants(safeTenants);
-      setFilteredTenants(safeTenants); // Default to all if room is skipped
+      try {
+        const tenantData = await fetchTenantsApi("", "", hostelId);
+        
+        // Normalize paginated Spring Boot response or standard array
+        const safeTenants = Array.isArray(tenantData?.content) 
+          ? tenantData.content 
+          : Array.isArray(tenantData) 
+          ? tenantData 
+          : [];
 
-      // Extract sorted list of unique room configurations
-      const uniqueRooms = [...new Set(safeTenants.map(t => t.roomNumber || t.roomNo).filter(Boolean))];
-      setRooms(uniqueRooms.sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true})));
+        setAllTenants(safeTenants);
+        setFilteredTenants(safeTenants); // Default to all if room is skipped
+
+        // Extract sorted list of unique room configurations
+        const uniqueRooms = [
+          ...new Set(safeTenants.map((t) => t.roomNumber || t.roomNo).filter(Boolean))
+        ];
+        
+        setRooms(
+          uniqueRooms.sort((a, b) =>
+            String(a).localeCompare(String(b), undefined, { numeric: true })
+          )
+        );
+      } catch (error) {
+        console.error("Failed to fetch hostel tenants:", error);
+        setAllTenants([]);
+        setFilteredTenants([]);
+        setRooms([]);
+      }
     }
   };
 
@@ -62,7 +99,7 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
     setSelectedTenant(""); // Clear selected occupant context safely
 
     if (roomNum) {
-      const matchingOccupants = allTenants.filter(t => {
+      const matchingOccupants = (Array.isArray(allTenants) ? allTenants : []).filter((t) => {
         const tenantRoom = t.roomNumber || t.roomNo;
         return tenantRoom && tenantRoom.toString().trim() === roomNum.toString().trim();
       });
@@ -73,25 +110,37 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
     }
   };
 
-  // Step 3: Invoke flexible spring data API search options
+  // Step 3: Invoke flexible search options
   const handleSearchFilter = async (e) => {
     e.preventDefault();
-    
+
     const searchParams = {};
-    
     if (selectedHostel) searchParams.hostelId = selectedHostel;
     if (selectedTenant) searchParams.tenantId = selectedTenant;
 
-    let filteredData = await searchIncomeApi(searchParams);
-    if (!filteredData) filteredData = [];
+    try {
+      let response = await searchIncomeApi(searchParams);
+      let filteredData = Array.isArray(response?.content)
+        ? response.content
+        : Array.isArray(response)
+        ? response
+        : [];
 
-    // Client-side mapping fallback
-    if (selectedHostel && selectedRoom && !selectedTenant) {
-      const targetTenantIdsInRoom = filteredTenants.map(t => t.tenantId);
-      const crossMatch = filteredData.filter(inc => targetTenantIdsInRoom.includes(inc.tenantId));
-      setIncomes(crossMatch);
-    } else {
-      setIncomes(filteredData);
+      // Client-side mapping fallback if room filter is active without specific tenant
+      if (selectedHostel && selectedRoom && !selectedTenant) {
+        const targetTenantIdsInRoom = (Array.isArray(filteredTenants) ? filteredTenants : []).map(
+          (t) => t.tenantId || t.id
+        );
+        const crossMatch = filteredData.filter((inc) =>
+          targetTenantIdsInRoom.includes(inc.tenantId)
+        );
+        setIncomes(crossMatch);
+      } else {
+        setIncomes(filteredData);
+      }
+    } catch (error) {
+      console.error("Search failed:", error);
+      setIncomes([]);
     }
   };
 
@@ -106,20 +155,29 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
   };
 
   const handleDelete = async (id) => {
-    // ✅ Functional API guard defense strategy
     if (!isAdmin) {
       alert("Unauthorized operational request denied.");
       return;
     }
 
     if (window.confirm("Are you sure you want to delete this ledger entry?")) {
-      const success = await deleteIncomeApi(id);
-      if (success !== null) {
-        alert("Entry deleted successfully.");
-        handleReset();
+      try {
+        const success = await deleteIncomeApi(id);
+        if (success !== null) {
+          alert("Entry deleted successfully.");
+          handleReset();
+        }
+      } catch (error) {
+        console.error("Failed to delete entry:", error);
+        alert("Failed to delete entry.");
       }
     }
   };
+
+  const safeIncomes = Array.isArray(incomes) ? incomes : [];
+  const safeHostels = Array.isArray(hostels) ? hostels : [];
+  const safeRooms = Array.isArray(rooms) ? rooms : [];
+  const safeFilteredTenants = Array.isArray(filteredTenants) ? filteredTenants : [];
 
   return (
     <div style={containerStyle}>
@@ -130,46 +188,51 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
 
       {/* CASCADING LOGISTICS PANEL SEARCH FILTERS */}
       <form onSubmit={handleSearchFilter} style={filterPanel}>
-        
         {/* Dropdown 1: Hostel Selection */}
         <select value={selectedHostel} onChange={handleHostelChange} style={filterInput}>
           <option value="">All Hostels</option>
-          {hostels.map(h => (
-            <option key={h.hostelId} value={h.hostelId}>{h.hostelName}</option>
+          {safeHostels.map((h) => (
+            <option key={h.hostelId || h.id} value={h.hostelId || h.id}>
+              {h.hostelName || h.name}
+            </option>
           ))}
         </select>
 
         {/* Dropdown 2: Room Selection */}
-        <select 
-          value={selectedRoom} 
-          onChange={handleRoomChange} 
-          disabled={!selectedHostel} 
+        <select
+          value={selectedRoom}
+          onChange={handleRoomChange}
+          disabled={!selectedHostel}
           style={filterInput}
         >
           <option value="">All Rooms (Optional)</option>
-          {rooms.map(room => (
+          {safeRooms.map((room) => (
             <option key={room} value={room}>Room {room}</option>
           ))}
         </select>
 
         {/* Dropdown 3: Select Tenant */}
-        <select 
-          value={selectedTenant} 
-          onChange={(e) => setSelectedTenant(e.target.value)} 
-          disabled={!selectedHostel} 
+        <select
+          value={selectedTenant}
+          onChange={(e) => setSelectedTenant(e.target.value)}
+          disabled={!selectedHostel}
           style={filterInput}
         >
           <option value="">Select Tenant</option>
-          {filteredTenants.map(t => (
-            <option key={t.tenantId} value={t.tenantId}>
+          {safeFilteredTenants.map((t) => (
+            <option key={t.tenantId || t.id} value={t.tenantId || t.id}>
               {t.fullName} {t.bedNumber ? `(${t.bedNumber})` : ""}
             </option>
           ))}
         </select>
 
         <div style={{ display: "flex", gap: "5px" }}>
-          <button type="submit" style={{ ...submitBtn, padding: "6px 15px", background: "#28a745" }}>Search Logs</button>
-          <button type="button" onClick={handleReset} style={{ ...cancelBtn, padding: "6px 15px" }}>Clear Filter</button>
+          <button type="submit" style={{ ...submitBtn, padding: "6px 15px", background: "#28a745" }}>
+            Search Logs
+          </button>
+          <button type="button" onClick={handleReset} style={{ ...cancelBtn, padding: "6px 15px" }}>
+            Clear Filter
+          </button>
         </div>
       </form>
 
@@ -187,28 +250,38 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
           </tr>
         </thead>
         <tbody>
-          {incomes.length === 0 ? (
+          {safeIncomes.length === 0 ? (
             <tr>
-              <td colSpan="7" style={{ ...tdStyle, textAlign: "center", color: "#6c757d" }}>No matching income entries found.</td>
+              <td colSpan="7" style={{ ...tdStyle, textAlign: "center", color: "#6c757d" }}>
+                No matching income entries found.
+              </td>
             </tr>
           ) : (
-            incomes.map((inc) => (
-              <tr key={inc.incomeId} style={{ borderBottom: "1px solid #dee2e6" }}>
-                <td style={tdStyle}>{inc.incomeId}</td>
-                <td style={tdStyle}>{inc.incomeDate}</td>
-                <td style={tdStyle}>{inc.tenantId}</td>
-                <td style={tdStyle}>₹{inc.amount.toFixed(2)}</td>
-                <td style={tdStyle}>{inc.paymentMode}</td>
-                <td style={tdStyle}>{inc.transactionId || "—"}</td>
-                <td style={tdStyle}>
-                  <button onClick={() => onModifyTrigger(inc)} style={editBtnStyle}>Edit</button>
-                  {/* ✅ Wrap delete actions container block conditionally */}
-                  {isAdmin && (
-                    <button onClick={() => handleDelete(inc.incomeId)} style={deleteBtnStyle}>Delete</button>
-                  )}
-                </td>
-              </tr>
-            ))
+            safeIncomes.map((inc) => {
+              const incomeId = inc.incomeId || inc.id;
+              const numericAmount = typeof inc.amount === "number" ? inc.amount : parseFloat(inc.amount) || 0;
+
+              return (
+                <tr key={incomeId} style={{ borderBottom: "1px solid #dee2e6" }}>
+                  <td style={tdStyle}>{incomeId}</td>
+                  <td style={tdStyle}>{inc.incomeDate || "—"}</td>
+                  <td style={tdStyle}>{inc.tenantId || "—"}</td>
+                  <td style={tdStyle}>₹{numericAmount.toFixed(2)}</td>
+                  <td style={tdStyle}>{inc.paymentMode || "—"}</td>
+                  <td style={tdStyle}>{inc.transactionId || "—"}</td>
+                  <td style={tdStyle}>
+                    <button onClick={() => onModifyTrigger && onModifyTrigger(inc)} style={editBtnStyle}>
+                      Edit
+                    </button>
+                    {isAdmin && (
+                      <button onClick={() => handleDelete(incomeId)} style={deleteBtnStyle}>
+                        Delete
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>
