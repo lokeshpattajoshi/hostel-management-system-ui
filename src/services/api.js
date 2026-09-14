@@ -290,3 +290,244 @@ export const rejectRequestApi = async (id, adminId, remarks) => {
 export const fetchMyPendingApprovalsApi = async (page = 0, size = 10) => {
   return await fetchWithAuth(`/approval/pending?page=${page}&size=${size}`);
 };
+
+// Set your Spring Boot backend origin directly if not using package.json proxy
+export const downloadTenantsApi = async (name = "", phone = "", hostelId = "") => {
+  try {
+    // 1. Build query string dynamically without a dangling '?'
+    const params = new URLSearchParams();
+    if (name && name.trim() !== "") params.append("name", name.trim());
+    if (phone && phone.trim() !== "") params.append("phone", phone.trim());
+    if (hostelId) params.append("hostelId", hostelId);
+
+    const queryString = params.toString();
+    
+    // 2. Relative endpoint starting from /tenants/download (omitting extra /api)
+    const endpoint = queryString 
+      ? `/tenants/download?${queryString}` 
+      : `/tenants/download`;
+
+    // 3. Retrieve Bearer token from localStorage
+    const token = localStorage.getItem("token");
+
+    const headers = {
+      "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream"
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    // 4. Construct URL ensuring single '/api' prefix handling
+    // Normalizes URL whether API_BASE_URL ends with '/api' or not
+    const baseUrl = API_BASE_URL.endsWith("/api") ? API_BASE_URL : `${API_BASE_URL}/api`;
+    const fullUrl = `${baseUrl}${endpoint}`;
+
+    console.log("Downloading file from:", fullUrl);
+
+    const response = await fetch(fullUrl, {
+      method: "GET",
+      headers
+    });
+
+    // 5. Handle session expiration (401)
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent("api-auth-failure", { detail: { status: 401 } }));
+      localStorage.clear();
+      window.location.href = "/";
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Server returned status ${response.status}:${response.statusText}`);
+    }
+
+    // 6. Receive binary response stream as Blob
+    const blob = await response.blob();
+
+    if (blob.type.includes("text/html")) {
+      throw new Error("Received HTML content instead of Excel binary stream. Check backend mapping.");
+    }
+
+    // 7. Trigger native browser file download
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.setAttribute("download", `Tenants_Export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+
+  } catch (error) {
+    console.error("Error downloading tenant data:", error);
+    alert("Download failed: " + error.message);
+  }
+};
+
+// Add this in services/api.js
+export const fetchAllExpensesApi = async (paidBy = "", expenseType = "", description = "") => {
+  const params = new URLSearchParams();
+  if (paidBy && paidBy.trim() !== "") params.append("paidBy", paidBy.trim());
+  if (expenseType && expenseType.trim() !== "") params.append("expenseType", expenseType.trim());
+  if (description && description.trim() !== "") params.append("description", description.trim());
+
+  const queryString = params.toString();
+  const endpoint = queryString ? `/expenses?${queryString}` : `/expenses`;
+
+  return await fetchWithAuth(endpoint, { method: "GET" });
+};
+
+export const downloadExpensesApi = async (filters) => {
+  try {
+    const params = new URLSearchParams();
+
+    if (filters.hostelId === "ALL") {
+      // Format 1: /api/expenses/download?paidBy=...&expenseType=...&description=...
+      if (filters.paidBy?.trim()) params.append("paidBy", filters.paidBy.trim());
+      if (filters.expenseType?.trim()) params.append("expenseType", filters.expenseType.trim());
+      if (filters.description?.trim()) params.append("description", filters.description.trim());
+    } else {
+      // Format 2: /api/expenses/download?hostelId=...&startDate=...&endDate=...
+      if (filters.hostelId) params.append("hostelId", filters.hostelId);
+      if (filters.startDate) params.append("startDate", filters.startDate);
+      if (filters.endDate) params.append("endDate", filters.endDate);
+    }
+
+    const queryString = params.toString();
+    const endpoint = queryString 
+      ? `/expenses/download?${queryString}` 
+      : `/expenses/download`;
+
+    const token = localStorage.getItem("token");
+    const headers = {
+      "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream"
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const baseUrl = API_BASE_URL.endsWith("/api") ? API_BASE_URL : `${API_BASE_URL}/api`;
+    const response = await fetch(`${baseUrl}${endpoint}`, { method: "GET", headers });
+
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent("api-auth-failure", { detail: { status: 401 } }));
+      localStorage.clear();
+      window.location.href = "/";
+      return;
+    }
+
+    if (!response.ok) throw new Error(`Server status ${response.status}`);
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.setAttribute("download", `Expenses_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+
+  } catch (error) {
+    console.error("Error downloading expense report:", error);
+    alert("Download failed: " + error.message);
+  }
+};
+
+export const downloadIncomeApi = async (filters = {}) => {
+  try {
+    const params = new URLSearchParams();
+
+    if (filters.hostelId) params.append("hostelId", filters.hostelId);
+    if (filters.tenantId) params.append("tenantId", filters.tenantId);
+
+    const queryString = params.toString();
+    const endpoint = queryString 
+      ? `/income/download?${queryString}` 
+      : `/income/download`;
+
+    const token = localStorage.getItem("token");
+    const headers = {
+      "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream"
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const baseUrl = API_BASE_URL.endsWith("/api") ? API_BASE_URL : `${API_BASE_URL}/api`;
+    const response = await fetch(`${baseUrl}${endpoint}`, { method: "GET", headers });
+
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent("api-auth-failure", { detail: { status: 401 } }));
+      localStorage.clear();
+      window.location.href = "/";
+      return;
+    }
+
+    if (!response.ok) throw new Error(`Server returned status ${response.status}`);
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.setAttribute("download", `Income_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+
+  } catch (error) {
+    console.error("Error downloading income report:", error);
+    alert("Download failed: " + error.message);
+  }
+};
+
+// --- NATIVE FETCH IMPLEMENTATION FOR DASHBOARD SUMMARY PDF DOWNLOAD ---
+export const downloadDashboardSummaryApi = async (payload) => {
+  const token = localStorage.getItem("token");
+  const headers = {
+    "Content-Type": "application/json",
+    "Accept": "application/pdf, application/octet-stream"
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  // Normalize base URL to avoid double slashes or missing '/api'
+  const normalizedBase = (API_BASE_URL || "").replace(/\/+$/, "");
+  const baseUrl = normalizedBase.endsWith("/api") ? normalizedBase : `${normalizedBase}/api`;
+  const endpoint = `${baseUrl}/reports/dashboard-summary/download`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    // Handle session expiration
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent("api-auth-failure", { detail: { status: 401 } }));
+      localStorage.clear();
+      window.location.href = "/";
+      return;
+    }
+
+    // Handle HTTP errors with detailed message extraction
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      let errorMessage = `Download failed with status: ${response.status}`;
+      
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.message || errorJson.error || errorMessage;
+      } catch {
+        if (errorText) errorMessage = errorText;
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    return await response.blob();
+  } catch (error) {
+    console.error("Dashboard PDF Download Error:", error);
+    throw error;
+  }
+};

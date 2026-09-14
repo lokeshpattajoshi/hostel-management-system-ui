@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { fetchHostelsApi, fetchTenantsApi, searchIncomeApi, deleteIncomeApi } from "../services/api";
+import { 
+  fetchHostelsApi, 
+  fetchTenantsApi, 
+  searchIncomeApi, 
+  deleteIncomeApi,
+  downloadIncomeApi 
+} from "../services/api";
 
 const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
   const [hostels, setHostels] = useState([]);
   const [allTenants, setAllTenants] = useState([]); // Master bucket for selected hostel
   const [filteredTenants, setFilteredTenants] = useState([]); // Room-specific filtered view bucket
   const [incomes, setIncomes] = useState([]);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Cascading optional search tracking states
   const [selectedHostel, setSelectedHostel] = useState("");
@@ -144,6 +151,23 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
     }
   };
 
+  // Step 4: Income export file download handler
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const downloadParams = {};
+      if (selectedHostel) downloadParams.hostelId = selectedHostel;
+      if (selectedTenant) downloadParams.tenantId = selectedTenant;
+
+      await downloadIncomeApi(downloadParams);
+    } catch (error) {
+      console.error("Failed to download income report:", error);
+      alert("Download failed. Please try again.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const handleReset = () => {
     setSelectedHostel("");
     setSelectedRoom("");
@@ -229,6 +253,14 @@ const ViewIncome = ({ onModifyTrigger, onCreateTrigger, userRole }) => {
         <div style={{ display: "flex", gap: "5px" }}>
           <button type="submit" style={{ ...submitBtn, padding: "6px 15px", background: "#28a745" }}>
             Search Logs
+          </button>
+          <button 
+            type="button" 
+            onClick={handleDownload} 
+            disabled={isDownloading} 
+            style={{ ...submitBtn, padding: "6px 15px", background: "#17a2b8" }}
+          >
+            {isDownloading ? "Downloading..." : "📥 Download"}
           </button>
           <button type="button" onClick={handleReset} style={{ ...cancelBtn, padding: "6px 15px" }}>
             Clear Filter

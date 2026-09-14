@@ -1,22 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { 
-  fetchHostelsApi, 
-  fetchDashboardSummaryApi, 
-  fetchIncomeReportDetailsApi, 
-  fetchExpenseReportDetailsApi 
+import {
+  fetchHostelsApi,
+  fetchDashboardSummaryApi,
+  fetchIncomeReportDetailsApi,
+  fetchExpenseReportDetailsApi,
+  downloadDashboardSummaryApi
 } from "../services/api";
 
 const ReportManagement = () => {
   const [hostels, setHostels] = useState([]);
-  const [selectedHostel, setSelectedHostel] = useState(""); 
-  
+  const [selectedHostel, setSelectedHostel] = useState("");
+
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [summary, setSummary] = useState(null);
-  
-  const [detailedViewType, setDetailedViewType] = useState(null); 
+
+  const [detailedViewType, setDetailedViewType] = useState(null);
   const [detailedRecords, setDetailedRecords] = useState([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
@@ -45,6 +47,19 @@ const ReportManagement = () => {
     initializePageData();
   }, []);
 
+  // Helper function to trigger browser file download
+  const triggerFileDownload = (blob, filename) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  // Handler to generate dashboard metrics (handles single hostel AND combined all hostels)
   const handleFetchReport = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -54,6 +69,7 @@ const ReportManagement = () => {
 
     try {
       if (!selectedHostel) {
+        // Multi-hostel aggregation loop
         let aggregatedSummary = {
           totalIncome: 0,
           totalExpense: 0,
@@ -81,6 +97,7 @@ const ReportManagement = () => {
         aggregatedSummary.netProfit = aggregatedSummary.totalIncome - aggregatedSummary.totalExpense;
         setSummary(aggregatedSummary);
       } else {
+        // Single hostel fetch
         const res = await fetchDashboardSummaryApi({
           hostelId: parseInt(selectedHostel),
           fromDate,
@@ -95,12 +112,51 @@ const ReportManagement = () => {
     }
   };
 
+  // Handler for Excel Download API call (handles single hostel AND combined all hostels)
+  const handleDownloadExcelReport = async () => {
+    try {
+      setDownloading(true);
+
+      if (!selectedHostel) {
+        // Loop through all hostels using the existing per-hostel API pattern
+        for (const h of hostels) {
+          const payload = {
+            hostelId: parseInt(h.hostelId),
+            fromDate,
+            toDate
+          };
+          const blob = await downloadDashboardSummaryApi(payload);
+          if (blob) {
+            const cleanName = (h.hostelName || `hostel_${h.hostelId}`).replace(/[^a-zA-Z0-9]/g, "_");
+            triggerFileDownload(blob, `${cleanName}_summary_${fromDate}_to_${toDate}.xlsx`);
+          }
+        }
+      } else {
+        // Single hostel download
+        const payload = {
+          hostelId: parseInt(selectedHostel),
+          fromDate,
+          toDate
+        };
+        const blob = await downloadDashboardSummaryApi(payload);
+        if (blob) {
+          triggerFileDownload(blob, `hostel_${selectedHostel}_summary_${fromDate}_to_${toDate}.xlsx`);
+        }
+      }
+    } catch (err) {
+      console.error("Failed downloading summary report:", err);
+      alert("Error generating download file: " + err.message);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const loadDetailedBreakdown = async (type) => {
     setLoadingDetails(true);
     setDetailedViewType(type);
     setDetailedRecords([]);
-    setSubTab("ledger"); 
-    
+    setSubTab("ledger");
+
     try {
       let combinedRecords = [];
       const targets = selectedHostel ? [{ hostelId: selectedHostel }] : hostels;
@@ -112,7 +168,7 @@ const ReportManagement = () => {
         } else if (type === "EXPENSE") {
           data = await fetchExpenseReportDetailsApi(h.hostelId, fromDate, toDate);
         }
-        
+
         if (data && data.length > 0) {
           const trackingName = hostels.find(x => String(x.hostelId) === String(h.hostelId))?.hostelName || `Hostel #${h.hostelId}`;
           const normalized = data.map(item => ({ ...item, originHostelName: trackingName }));
@@ -129,7 +185,7 @@ const ReportManagement = () => {
 
   const userWiseMetrics = detailedRecords.reduce((acc, curr) => {
     let user = "Not Specified (Null)";
-    
+
     if (detailedViewType === "EXPENSE") {
       user = curr.paidByUserName || "Not Specified (Null)";
     } else if (detailedViewType === "INCOME") {
@@ -144,7 +200,7 @@ const ReportManagement = () => {
     }
     acc[user].totalAmount += amt;
     acc[user].transactionCount += 1;
-    
+
     return acc;
   }, {});
 
@@ -156,9 +212,9 @@ const ReportManagement = () => {
       <form onSubmit={handleFetchReport} style={filterPanel}>
         <div style={inputGroup}>
           <label style={labelStyle}>Select Scope</label>
-          <select 
-            value={selectedHostel} 
-            onChange={(e) => setSelectedHostel(e.target.value)} 
+          <select
+            value={selectedHostel}
+            onChange={(e) => setSelectedHostel(e.target.value)}
             style={filterInput}
           >
             <option value="">🌍 -- View All Hostels Combined --</option>
@@ -178,9 +234,19 @@ const ReportManagement = () => {
           <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} required style={filterInput} />
         </div>
 
-        <button type="submit" disabled={loading} style={searchBtn}>
-          {loading ? "Aggregating Data..." : "Generate Dashboard"}
-        </button>
+        <div style={buttonGroupStyle}>
+          <button type="submit" disabled={loading} style={searchBtn}>
+            {loading ? "Aggregating Data..." : "Generate Dashboard"}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadExcelReport}
+            disabled={downloading}
+            style={downloadBtn}
+          >
+            {downloading ? "Downloading..." : "Download Excel"}
+          </button>
+        </div>
       </form>
 
       {/* OVERVIEW STATS CARDS GRID */}
@@ -223,7 +289,6 @@ const ReportManagement = () => {
         <div style={detailContainer}>
           <div style={detailHeader}>
             <div>
-              {/* 💡 Swapped from "Ledger" to "Statement" */}
               <h4 style={{ margin: 0, color: "#2c3e50", fontSize: "16px", fontWeight: "700" }}>
                 {detailedViewType === "INCOME" ? "💰 Income Statement" : "🛑 Expense Statement"}
               </h4>
@@ -236,15 +301,15 @@ const ReportManagement = () => {
 
           {!loadingDetails && detailedRecords.length > 0 && (
             <div style={subTabWrapper}>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setSubTab("ledger")}
                 style={{ ...subTabItem, backgroundColor: subTab === "ledger" ? "#4a5568" : "#e2e8f0", color: subTab === "ledger" ? "#fff" : "#4a5568" }}
               >
                 📋 Transaction Logs
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setSubTab("userWise")}
                 style={{ ...subTabItem, backgroundColor: subTab === "userWise" ? "#007bff" : "#e2e8f0", color: subTab === "userWise" ? "#fff" : "#4a5568" }}
               >
@@ -261,7 +326,7 @@ const ReportManagement = () => {
             </p>
           ) : (
             <div style={{ overflowX: "auto" }}>
-              
+
               {/* SUB-VIEW OPTION 1: TRANSACTION LOGS MODE */}
               {subTab === "ledger" && (
                 <table style={tableStyle}>
@@ -329,11 +394,11 @@ const ReportManagement = () => {
                             {metrics.transactionCount} transactions managed
                           </span>
                         </td>
-                        <td style={{ 
-                          ...tdStyle, 
-                          fontWeight: "700", 
-                          fontSize: "15px", 
-                          color: detailedViewType === "INCOME" ? "#28a745" : "#dc3545" 
+                        <td style={{
+                          ...tdStyle,
+                          fontWeight: "700",
+                          fontSize: "15px",
+                          color: detailedViewType === "INCOME" ? "#28a745" : "#dc3545"
                         }}>
                           ₹{metrics.totalAmount.toFixed(2)}
                         </td>
@@ -351,13 +416,18 @@ const ReportManagement = () => {
   );
 };
 
+// Styling Rules
 const containerStyle = { background: "#fff", padding: "20px", borderRadius: "8px" };
 const headerStyle = { borderBottom: "2px solid #f1f3f5", paddingBottom: "10px", margin: "0 0 20px 0", color: "#2c3e50" };
+
 const filterPanel = { display: "flex", flexWrap: "wrap", gap: "15px", padding: "20px", background: "#f8f9fa", borderRadius: "6px", marginBottom: "25px", alignItems: "flex-end" };
 const inputGroup = { display: "flex", flexDirection: "column", gap: "5px" };
 const labelStyle = { fontSize: "12px", fontWeight: "600", color: "#495057" };
-const filterInput = { padding: "10px", borderRadius: "4px", border: "1px solid #ced4da", fontSize: "14px", minWidth: "240px", background: "#fff" };
-const searchBtn = { padding: "11px 22px", background: "#007bff", color: "#fff", border: "none", borderRadius: "4px", fontSize: "14px", fontWeight: "500", cursor: "pointer" };
+const filterInput = { padding: "10px", borderRadius: "4px", border: "1px solid #ced4da", fontSize: "14px", minWidth: "220px", background: "#fff" };
+
+const buttonGroupStyle = { display: "flex", gap: "10px", alignItems: "center" };
+const searchBtn = { padding: "11px 20px", background: "#007bff", color: "#fff", border: "none", borderRadius: "4px", fontSize: "14px", fontWeight: "500", cursor: "pointer" };
+const downloadBtn = { padding: "11px 20px", background: "#15803d", color: "#fff", border: "none", borderRadius: "4px", fontSize: "14px", fontWeight: "600", cursor: "pointer" };
 
 const statsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px" };
 const cardStyle = { background: "#fff", padding: "20px", borderRadius: "6px", boxShadow: "0 2px 5px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "8px" };

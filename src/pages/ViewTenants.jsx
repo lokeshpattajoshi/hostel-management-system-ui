@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { fetchTenantsApi, fetchHostelsApi, deleteTenantApi } from "../services/api";
+import { fetchTenantsApi, fetchHostelsApi, downloadTenantsApi } from "../services/api";
 
 const ViewTenants = ({ onEdit, userRole = "staff" }) => {
   const [tenants, setTenants] = useState([]);
   const [hostels, setHostels] = useState([]);
   const [search, setSearch] = useState({ name: "", phone: "", hostelId: "", status: "ALL" });
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Server-side pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -14,7 +15,7 @@ const ViewTenants = ({ onEdit, userRole = "staff" }) => {
 
   const isAdmin = userRole?.toLowerCase() === "admin";
 
-  // Fetch pageable data from /api/tenant-charges/search
+  // Fetch pageable data from backend
   const loadTenants = useCallback(async () => {
     const pageIndex = currentPage - 1; // Spring Boot uses 0-based page numbers
 
@@ -56,6 +57,13 @@ const ViewTenants = ({ onEdit, userRole = "staff" }) => {
     loadTenants();
   }, [currentPage, loadTenants]);
 
+  // Download handler passing current filter criteria
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    await downloadTenantsApi(search.name, search.phone, search.hostelId);
+    setIsDownloading(false);
+  };
+
   // Status filtering applied locally on the returned slice
   const filteredTenants = tenants.filter((t) => {
     if (search.status === "ACTIVE") return t.isActive === true;
@@ -74,8 +82,8 @@ const ViewTenants = ({ onEdit, userRole = "staff" }) => {
 
   return (
     <div style={{ padding: "15px" }}>
-      {/* Search Bar */}
-      <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+      {/* Search Bar & Download Button */}
+      <div style={{ display: "flex", gap: "10px", marginBottom: "20px", alignItems: "center" }}>
         <input 
           style={inputStyle} 
           placeholder="Search by Name..." 
@@ -107,6 +115,15 @@ const ViewTenants = ({ onEdit, userRole = "staff" }) => {
           <option value="ACTIVE">Active</option>
           <option value="EXITED">Exited</option>
         </select>
+
+        {/* Download Button */}
+        <button 
+          onClick={handleDownload} 
+          disabled={isDownloading} 
+          style={downloadBtnStyle}
+        >
+          {isDownloading ? "Downloading..." : "Download"}
+        </button>
       </div>
 
       {/* Data Table */}
@@ -207,6 +224,7 @@ const ViewTenants = ({ onEdit, userRole = "staff" }) => {
 };
 
 const inputStyle = { flex: 1, padding: "8px", borderRadius: "4px", border: "1px solid #ccc" };
+const downloadBtnStyle = { padding: "8px 16px", background: "#0d6efd", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold", whiteSpace: "nowrap" };
 const tableCardStyle = { background: "#fff", borderRadius: "6px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", overflow: "hidden" };
 const cellStyle = { padding: "10px 12px", verticalAlign: "top", fontSize: "14px" };
 const editBtnStyle = { padding: "4px 8px", background: "#ffc107", border: "none", borderRadius: "4px", cursor: "pointer" };
